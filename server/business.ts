@@ -1,7 +1,7 @@
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Database, Transaction } from "../src/db/client";
-import * as s from "../src/db/schema";
+import type { Database, Transaction } from "../src/db/client.js";
+import * as s from "../src/db/schema.js";
 import {
   allow,
   audit,
@@ -10,7 +10,7 @@ import {
   ownStudent,
   requireValue,
   type Context,
-} from "./security";
+} from "./security.js";
 export const uuid = z.string().uuid();
 export const date = z.iso.date();
 export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/);

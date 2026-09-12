@@ -2,8 +2,8 @@ import { del, get, head } from "@vercel/blob";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Database } from "../src/db/client";
-import * as s from "../src/db/schema";
+import type { Database } from "../src/db/client.js";
+import * as s from "../src/db/schema.js";
 import {
   allow,
   audit,
@@ -15,7 +15,7 @@ import {
   requireValue,
   tokenHash,
   type Context,
-} from "./security";
+} from "./security.js";
 export const MAX_PROOF_SIZE = 5 * 1024 * 1024;
 export function validateSignature(bytes: Uint8Array, mime: string) {
   if (mime === "image/jpeg")

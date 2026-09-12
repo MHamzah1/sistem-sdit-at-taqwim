@@ -1,6 +1,24 @@
 # Deployment production
 
-Target team: `asoiiis-projects`. Target project: `sistem-spp-kelayakan-ujian`. Nama domain belum diklaim sampai deployment berhasil.
+Team: `asoiiis-projects`. Project: `sistem-spp-kelayakan-ujian`. Domain production aktif di <https://sistem-spp-kelayakan-ujian.vercel.app>.
+
+## Status saat ini
+
+Provisioning dan deployment pertama sudah dijalankan pada 12 September 2026.
+
+| Komponen | Status |
+| --- | --- |
+| Project Vercel | Dibuat dan di-link ke team `asoiiis-projects` |
+| Neon PostgreSQL | Project `sparkling-bonus-21804414`, region `us-east-1`, 30 tabel termigrasi |
+| Vercel Blob | Store `sdit-at-taqwim-bukti`, access private, region `sin1` |
+| Environment production | DATABASE_URL, AUTH_SECRET, BLOB_READ_WRITE_TOKEN, APP_ORIGIN terisi |
+| Init | 4 role, 8 permission, 1 akun SUPER_ADMIN, tanpa data dummy |
+| Preflight | Lulus, termasuk tulis dan baca Blob private nyata |
+| Deployment production | Aktif dan lulus smoke test API serta browser |
+
+Dua penyesuaian yang masih terbuka. Neon memasang satu connection string yang sama untuk Production, Preview, dan Development, sehingga branch Neon terpisah perlu dibuat sebelum Preview dipakai untuk tes. `APP_ORIGIN` untuk Preview juga belum diisi.
+
+Langkah di bawah ini adalah runbook untuk provisioning ulang atau untuk environment baru.
 
 ## Provision
 
@@ -56,5 +74,9 @@ Gunakan akun/data uji yang jelas, lalu hapus master data uji yang belum dirujuk 
 - Logout/tutup browser; login browser/device kedua; data yang sama tetap tersedia.
 
 Jangan mengubah status READY sampai migration Neon, private Blob, deployment dan smoke test production terbukti lulus. Tes PGlite dan browser lokal bukan bukti koneksi Neon/Vercel production.
+
+Dari daftar di atas, yang sudah lulus di production adalah health check, login admin beserta cookie dan revocation, endpoint unauthorized, CRUD master, refresh langsung keempat rute, JSON 404 untuk API tak dikenal, laporan, audit, serta login dari browser kedua. Yang belum dijalankan adalah seluruh alur finansial, dispensasi, kartu ujian, dan login untuk role TU, kepala sekolah, dan wali. Alur finansial sebaiknya dijalankan sebagai UAT bersama sekolah atau di branch Neon staging, karena transaksi dan jejak auditnya permanen.
+
+Catatan runtime: import relatif pada `api/`, `server/`, dan `src/db/` wajib memakai ekstensi `.js`. Tanpa ekstensi, Vite dan tsx tetap jalan tetapi Node ESM di Vercel gagal dengan `ERR_MODULE_NOT_FOUND` dan seluruh endpoint mengembalikan 500.
 
 Referensi: [Neon serverless driver](https://neon.com/docs/serverless/serverless-driver), [Vercel client uploads](https://vercel.com/docs/vercel-blob/client-upload), [Vercel private storage](https://vercel.com/docs/vercel-blob/private-storage), [batas server uploads](https://vercel.com/docs/vercel-blob/server-upload).

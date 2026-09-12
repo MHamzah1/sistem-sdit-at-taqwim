@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { createServer } from "node:http";
-import { getDb } from "../src/db/client";
-import { handle } from "./app";
+import { getDb } from "../src/db/client.js";
+import { handle } from "./app.js";
 createServer(async (req, res) => {
   let connection: ReturnType<typeof getDb> | undefined;
   try {

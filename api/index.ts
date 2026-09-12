@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getDb } from "../src/db/client";
-import { handle } from "../server/app";
+import { getDb } from "../src/db/client.js";
+import { handle } from "../server/app.js";
 type ApiRequest = IncomingMessage & {
   body?: unknown;
   query: Record<string, string | string[] | undefined>;

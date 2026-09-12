@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Database } from "../src/db/client";
-import * as s from "../src/db/schema";
+import type { Database } from "../src/db/client.js";
+import * as s from "../src/db/schema.js";
 import {
   actorFor,
   allow,
@@ -19,7 +19,7 @@ import {
   tokenHash,
   verifyPassword,
   type Context,
-} from "./security";
+} from "./security.js";
 import {
   createDispensation,
   createPayment,
@@ -32,10 +32,10 @@ import {
   reviewPayment,
   today,
   uuid,
-} from "./business";
-import { createUser, isResource, mutateResource } from "./resources";
-import { readState } from "./state";
-import { downloadProof, registerProof, uploadToken } from "./files";
+} from "./business.js";
+import { createUser, isResource, mutateResource } from "./resources.js";
+import { readState } from "./state.js";
+import { downloadProof, registerProof, uploadToken } from "./files.js";
 const json = (value: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(value, {
     status,
