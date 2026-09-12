@@ -1,5 +1,13 @@
 {
-  "include": ["src", "server", "api", "scripts", "tests", "vite.config.ts", "drizzle.config.ts"],
+  "include": [
+    "src",
+    "server",
+    "api",
+    "scripts",
+    "tests",
+    "vite.config.ts",
+    "drizzle.config.ts"
+  ],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",
