@@ -1,8 +1,8 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import type { Database } from "../src/db/client.js";
-import * as s from "../src/db/schema.js";
-import { isGuardian, type Actor } from "./security.js";
+import type { Database } from "../src/db/client";
+import * as s from "../src/db/schema";
+import { isGuardian, type Actor } from "./security";
 export async function readState(db: Database, actor: Actor) {
   const guardianOnly = isGuardian(actor);
   const linked = guardianOnly

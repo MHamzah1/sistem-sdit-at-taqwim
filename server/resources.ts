@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Database, Transaction } from "../src/db/client.js";
-import * as s from "../src/db/schema.js";
+import type { Database, Transaction } from "../src/db/client";
+import * as s from "../src/db/schema";
 import {
   allow,
   audit,
@@ -9,8 +9,8 @@ import {
   HttpError,
   requireValue,
   type Context,
-} from "./security.js";
-import { date, month, normalizePhone, uuid } from "./business.js";
+} from "./security";
+import { date, month, normalizePhone, uuid } from "./business";
 const name = z.string().trim().min(1).max(200);
 const amount = z.number().int().positive().max(100000000);
 const definitions = {
@@ -293,7 +293,7 @@ export async function initialize(
 ) {
   z.email().parse(email);
   z.string().min(12).max(128).parse(password);
-  const { roleGrants } = await import("./security.js");
+  const { roleGrants } = await import("./security");
   const passwordHash = await hashPassword(password);
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(752901)`);

@@ -1,6 +1,6 @@
 # Sistem SPP & Kelayakan Ujian — SDIT AT-TAQWIM
 
-React + Vite + TypeScript, Vercel Node Functions, Drizzle ORM, Neon PostgreSQL, private Vercel Blob. Tampilan menggunakan branding dan stylesheet proyek semula.
+Next.js 15 (App Router) + React 19 + TypeScript, Drizzle ORM, Neon PostgreSQL, private Vercel Blob. Tampilan menggunakan branding dan stylesheet proyek sekolah.
 
 ## Menjalankan lokal
 
@@ -10,8 +10,6 @@ Node.js 24 diperlukan. Salin `.env.example` menjadi `.env` dan isi kredensial de
 npm install
 npm run db:migrate
 npm run db:init
-npm run dev:api
-# Terminal lain:
 npm run dev
 ```
 

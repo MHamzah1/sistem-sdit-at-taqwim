@@ -6,8 +6,8 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { and, eq, gt, sql } from "drizzle-orm";
-import type { Database, Transaction } from "../src/db/client.js";
-import * as s from "../src/db/schema.js";
+import type { Database, Transaction } from "../src/db/client";
+import * as s from "../src/db/schema";
 const scrypt = promisify(scryptCallback);
 export class HttpError extends Error {
   constructor(

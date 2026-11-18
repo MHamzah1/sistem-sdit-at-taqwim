@@ -1,3 +1,5 @@
+"use client";
+
 import {
   StrictMode,
   useEffect,
@@ -140,13 +142,15 @@ function Login({ success }: { success: () => void }) {
     </div>
   );
 }
-function App() {
+export function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [path, setPath] = useState(
-    location.pathname === "/" ? "/dashboard" : location.pathname,
+    typeof window !== "undefined" && window.location.pathname !== "/"
+      ? window.location.pathname
+      : "/dashboard",
   );
   const [sidebar, setSidebar] = useState(false);
   const [form, setForm] = useState<FormSpec | null>(null);
@@ -2245,8 +2249,14 @@ function AuditPage() {
     </Panel>
   );
 }
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+if (typeof document !== "undefined") {
+  const rootElement = document.getElementById("root");
+  if (rootElement && rootElement.dataset.standalone === "true") {
+    createRoot(rootElement).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+  }
+}
+

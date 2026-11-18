@@ -1,14 +1,42 @@
+# Dependencies
 node_modules
+/.pnp
+.pnp.js
+
+# Next.js build output
+.next
+/.next/
+out
+/out/
 dist
+/dist/
+
+# TypeScript cache
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Testing
+test-results
+playwright-report
+coverage
+
+# Vercel & Wrangler
+.vercel
 .wrangler
 .dev.vars*
-*.local
+
+# Environment & local secrets
 .env
 .env.*
 !.env.example
-.vercel
-test-results
-playwright-report
+*.local
 
-.vercel
-.env*
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
