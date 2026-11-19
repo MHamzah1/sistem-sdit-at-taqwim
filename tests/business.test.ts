@@ -13,6 +13,7 @@ import {
 import { hashPassword, verifyPassword } from "../server/security";
 import { validateSignature } from "../server/files";
 import { handle } from "../server/app";
+import { terbilang, receiptNumber } from "../src/data";
 test("eligibility checks missing invoices, old debt, and dispensations separately", () => {
   const required = monthsBetween("2026-08-15", "2026-11-01");
   assert.equal(required.length, 4);
@@ -61,6 +62,14 @@ test("phone normalization, signatures, password hashing", async () => {
   assert.notEqual(hash, password);
   assert.equal(await verifyPassword(password, hash), true);
   assert.equal(await verifyPassword("wrong", hash), false);
+  assert.equal(terbilang(450000), "Empat Ratus Lima Puluh Ribu Rupiah");
+  assert.equal(terbilang(150000), "Seratus Lima Puluh Ribu Rupiah");
+  assert.equal(terbilang(1000000), "Satu Juta Rupiah");
+  assert.equal(terbilang(0), "Nol Rupiah");
+  assert.equal(
+    receiptNumber("2026-11-19", "abc12345-0000"),
+    "KW-20261119-ABC123",
+  );
 });
 test("PostgreSQL migration and all critical API flows", async (t) => {
   const f = await fixture();
@@ -461,6 +470,17 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         tuCookie,
         409,
       );
+      const guardianState = await (
+        await request("state", "GET", undefined, guardianCookie)
+      ).json();
+      const approvedPayment = guardianState.payments.find(
+        (p: { id: string }) => p.id === transferId,
+      );
+      assert.equal(approvedPayment?.status, "APPROVED");
+      const items = guardianState.paymentItems.filter(
+        (it: { paymentId: string }) => it.paymentId === transferId,
+      );
+      assert.ok(items.length > 0);
     });
     await t.test(
       "rejected transfer releases invoice without marking paid",
@@ -772,6 +792,7 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         ).json();
         assert.equal(state.students.length, 2);
         assert.ok(state.payments.length >= 3);
+        assert.ok(state.paymentItems.length >= 3);
         const invalid = await request(
           "students?page=-1",
           "GET",

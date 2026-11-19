@@ -113,6 +113,21 @@ export async function readState(db: Database, actor: Actor) {
           ),
         )
     : [];
+  const paymentItems = payments.length
+    ? await db
+        .select({
+          paymentId: s.paymentInvoiceItems.paymentId,
+          invoiceId: s.paymentInvoiceItems.invoiceId,
+          amount: s.paymentInvoiceItems.amount,
+        })
+        .from(s.paymentInvoiceItems)
+        .where(
+          inArray(
+            s.paymentInvoiceItems.paymentId,
+            payments.map((p) => p.id),
+          ),
+        )
+    : [];
   const templates = await db.select().from(s.characteristicFormTemplates);
   const fields = await db
     .select()
@@ -173,6 +188,7 @@ export async function readState(db: Database, actor: Actor) {
     auditLogs,
     users,
     proofs,
+    paymentItems,
     templates,
     fields,
     submissions,

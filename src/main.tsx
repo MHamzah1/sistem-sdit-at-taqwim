@@ -45,7 +45,13 @@ import {
   saveFile,
   uploadProof,
 } from "./lib/api";
-import { money, menuGroups, statusLabels } from "./data";
+import {
+  money,
+  menuGroups,
+  statusLabels,
+  terbilang,
+  receiptNumber,
+} from "./data";
 import {
   Badge,
   Brand,
@@ -158,6 +164,9 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [paymentStudent, setPaymentStudent] = useState<string | null>(null);
   const [card, setCard] = useState<Card | null>(null);
+  const [receiptPayment, setReceiptPayment] = useState<
+    AppState["payments"][number] | null
+  >(null);
   const [qr, setQr] = useState("");
   const [examId, setExamId] = useState("");
   const [yearId, setYearId] = useState("");
@@ -1302,6 +1311,15 @@ export function App() {
                         Bukti
                       </button>
                     ))}
+                  {p.status === "APPROVED" && (
+                    <button
+                      className="outline tiny"
+                      onClick={() => setReceiptPayment(p)}
+                    >
+                      <ReceiptText size={12} />
+                      Kuitansi
+                    </button>
+                  )}
                   {p.status === "PENDING_VERIFICATION" && can("finance") && (
                     <>
                       {button("Setujui", () =>
@@ -1498,6 +1516,57 @@ export function App() {
                     <Badge status={i.status} />
                   </div>
                 ))}
+                {(() => {
+                  const studentApprovedPayments = data.payments.filter(
+                    (p) => p.studentId === s.id && p.status === "APPROVED",
+                  );
+                  if (studentApprovedPayments.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 14 }}>
+                      <small
+                        style={{
+                          fontWeight: 600,
+                          color: "#497458",
+                          textTransform: "uppercase",
+                          display: "block",
+                          marginBottom: 4,
+                        }}
+                      >
+                        Kuitansi Pembayaran Sah
+                      </small>
+                      {studentApprovedPayments.map((p) => (
+                        <div
+                          key={p.id}
+                          className="row-between"
+                          style={{
+                            padding: "6px 8px",
+                            background: "#f0fdf4",
+                            border: "1px solid #bbf7d0",
+                            borderRadius: 6,
+                            marginTop: 6,
+                            fontSize: 11,
+                          }}
+                        >
+                          <div>
+                            <strong>{receiptNumber(p.paidOn, p.id)}</strong>
+                            <small
+                              style={{ display: "block", color: "#166534" }}
+                            >
+                              {p.paidOn} · {money(p.amount)}
+                            </small>
+                          </div>
+                          <button
+                            className="outline tiny"
+                            onClick={() => setReceiptPayment(p)}
+                          >
+                            <ReceiptText size={12} />
+                            Kuitansi
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div className="row-actions wrap">
                   {button(
                     "Upload pembayaran",
@@ -2000,6 +2069,154 @@ export function App() {
             </p>
             <small>Kode verifikasi: {card.verificationCode}</small>
             <p>Validasi QR oleh petugas sekolah yang sudah masuk.</p>
+          </div>
+          <button
+            className="primary full no-print"
+            onClick={() => window.print()}
+          >
+            <Printer size={16} />
+            Cetak / Simpan PDF
+          </button>
+        </Modal>
+      )}
+      {receiptPayment && (
+        <Modal
+          title="Kuitansi Pembayaran SPP"
+          close={() => setReceiptPayment(null)}
+        >
+          <div className="print-receipt">
+            <div className="receipt-header">
+              <Brand />
+              <div className="receipt-title">
+                <h2>BUKTI PEMBAYARAN SPP</h2>
+                <small>Kuitansi Resmi SDIT AT-TAQWIM</small>
+              </div>
+            </div>
+            <div className="receipt-meta">
+              <div>
+                <span>Nomor Registrasi</span>
+                <strong>
+                  {receiptNumber(receiptPayment.paidOn, receiptPayment.id)}
+                </strong>
+              </div>
+              <div>
+                <span>Tanggal Bayar</span>
+                <strong>{receiptPayment.paidOn}</strong>
+              </div>
+              <div>
+                <span>Metode Pembayaran</span>
+                <strong>
+                  {receiptPayment.method === "CASH"
+                    ? "Tunai (Kasir Sekolah)"
+                    : "Transfer Bank"}
+                </strong>
+              </div>
+            </div>
+            <div className="receipt-student">
+              <div>
+                <span>Nama Siswa</span>
+                <strong>{studentName(receiptPayment.studentId)}</strong>
+              </div>
+              <div>
+                <span>NIS</span>
+                <strong>
+                  {data.students.find((s) => s.id === receiptPayment.studentId)
+                    ?.nis || "—"}
+                </strong>
+              </div>
+              <div>
+                <span>Kelas</span>
+                <strong>
+                  {className(
+                    data.students.find((s) => s.id === receiptPayment.studentId)
+                      ?.classId || "",
+                  )}
+                </strong>
+              </div>
+            </div>
+            <table className="receipt-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>No</th>
+                  <th>Uraian Pembayaran</th>
+                  <th style={{ textAlign: "right", width: 140 }}>Nominal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const items = data.paymentItems.filter(
+                    (it) => it.paymentId === receiptPayment.id,
+                  );
+                  if (items.length === 0) {
+                    return (
+                      <tr>
+                        <td>1</td>
+                        <td>Iuran SPP Sekolah</td>
+                        <td style={{ textAlign: "right" }}>
+                          {money(receiptPayment.amount)}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return items.map((it, idx) => {
+                    const inv = data.invoices.find(
+                      (i) => i.id === it.invoiceId,
+                    );
+                    return (
+                      <tr key={it.invoiceId}>
+                        <td>{idx + 1}</td>
+                        <td>
+                          Iuran SPP Bulan {inv ? inv.month.slice(0, 7) : "—"}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          {money(it.amount)}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+                <tr className="receipt-total-row">
+                  <td colSpan={2}>
+                    <strong>TOTAL PEMBAYARAN</strong>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <strong>{money(receiptPayment.amount)}</strong>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="receipt-words">
+              <span>Terbilang:</span>
+              <em>{terbilang(receiptPayment.amount)}</em>
+            </div>
+            {receiptPayment.notes && (
+              <div className="receipt-notes">
+                <span>Catatan:</span> {receiptPayment.notes}
+              </div>
+            )}
+            <div className="receipt-footer">
+              <div className="receipt-stamp">
+                <span className="stamp-badge">LUNAS / DITERIMA</span>
+                <small>SDIT AT-TAQWIM</small>
+              </div>
+              <div className="receipt-sign">
+                <span>Petugas Kasir / Verifikator,</span>
+                <div className="sign-space" />
+                <strong>
+                  {data.users.find(
+                    (u) =>
+                      u.id ===
+                      (receiptPayment.reviewedBy || receiptPayment.createdBy),
+                  )?.name || "Kasir Tata Usaha"}
+                </strong>
+              </div>
+            </div>
+            <div className="receipt-legal">
+              <small>
+                Dokumen ini merupakan bukti pembayaran resmi yang diterbitkan
+                secara digital oleh Sistem SDIT AT-TAQWIM.
+              </small>
+            </div>
           </div>
           <button
             className="primary full no-print"
