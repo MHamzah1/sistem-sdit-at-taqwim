@@ -1,6 +1,6 @@
 # TGS-008: Kalkulator Risiko & Endpoint WhatsApp Fleksibel
 
-**Status:** disetujui · **Fitur:** `risiko-tunggakan-dan-whatsapp` · **Jenis:** Mandiri
+**Status:** selesai · **Fitur:** `risiko-tunggakan-dan-whatsapp` · **Jenis:** Mandiri
 **Bergantung pada:** tidak ada
 **Kesiapan data:** tidak perlu migrasi
 
@@ -40,9 +40,12 @@ Unit & integration test di `tests/business.test.ts`:
 - Pesan merinci daftar bulan yang menunggak.
 
 ## Acceptance Criteria
-- [ ] Endpoint `students/:id/reminder` berhasil dipanggil baik dengan maupun tanpa `examId`.
-- [ ] `npm test` dan `npm run typecheck` lulus 100%.
+- [x] Endpoint `students/:id/reminder` berhasil dipanggil baik dengan maupun tanpa `examId`.
+- [x] `npm test` dan `npm run typecheck` lulus 100% (23/23 tests lulus).
 
 ## Riwayat Status
 - 2026-11-19 dibuat — usulan (/fitur-pecah-tugas)
 - 2026-11-19 disetujui — disetujui oleh pengguna
+- 2026-11-19 berjalan — helper risiko & endpoint reminder fleksibel
+- 2026-11-19 selesai — verifikasi typecheck & test suite lulus
+

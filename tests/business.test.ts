@@ -13,7 +13,12 @@ import {
 import { hashPassword, verifyPassword } from "../server/security";
 import { validateSignature } from "../server/files";
 import { handle } from "../server/app";
-import { terbilang, receiptNumber, examParticipantNumber } from "../src/data";
+import {
+  terbilang,
+  receiptNumber,
+  examParticipantNumber,
+  calculateArrearsRisk,
+} from "../src/data";
 test("eligibility checks missing invoices, old debt, and dispensations separately", () => {
   const required = monthsBetween("2026-08-15", "2026-11-01");
   assert.equal(required.length, 4);
@@ -778,6 +783,32 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         assert.ok(message.includes("Siswa Pertama Edit"));
         assert.ok(message.includes("250.000"));
         assert.ok(message.includes("Test Ujian"));
+
+        // Test without examId (routine reminder)
+        const routineResult = await (
+          await request(
+            `students/${studentId}/reminder`,
+            "GET",
+            undefined,
+            tuCookie,
+          )
+        ).json();
+        assert.ok(
+          routineResult.url.startsWith("https://wa.me/6281234567890?text="),
+        );
+        assert.ok(routineResult.message.includes("Siswa Pertama Edit"));
+        assert.ok(routineResult.risk);
+        assert.equal(routineResult.risk.level, "MEDIUM");
+      },
+    );
+    await t.test(
+      "arrears risk level calculation is accurate and categorized",
+      () => {
+        assert.equal(calculateArrearsRisk(0).level, "NONE");
+        assert.equal(calculateArrearsRisk(1).level, "LOW");
+        assert.equal(calculateArrearsRisk(2).level, "MEDIUM");
+        assert.equal(calculateArrearsRisk(3).level, "HIGH");
+        assert.equal(calculateArrearsRisk(5).level, "HIGH");
       },
     );
     await t.test("form template, answers and owner validation", async () => {

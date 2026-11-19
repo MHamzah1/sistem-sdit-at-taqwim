@@ -33,6 +33,11 @@ import {
   today,
   uuid,
 } from "./business";
+import {
+  buildReminderMessage,
+  calculateArrearsRisk,
+  type ReminderTemplateKey,
+} from "../src/data";
 import { createUser, isResource, mutateResource } from "./resources";
 import { readState } from "./state";
 import { downloadProof, registerProof, uploadToken } from "./files";
@@ -635,10 +640,13 @@ export async function handle(
       const student = requireValue(
         state.students.find((s) => s.id === uuid.parse(match![1])),
       );
-      const exam = requireValue(
-        state.exams.find((e) => e.id === url.searchParams.get("examId")),
-        "Pilih periode ujian",
-      );
+      const examIdParam = url.searchParams.get("examId");
+      const exam = examIdParam
+        ? state.exams.find((e) => e.id === examIdParam)
+        : undefined;
+      const templateParam = (url.searchParams.get("template") ||
+        "auto") as ReminderTemplateKey;
+
       const classroom = requireValue(
         state.classes.find((c) => c.id === student.classId),
       );
@@ -650,13 +658,58 @@ export async function handle(
         ),
         "Wali belum dihubungkan",
       );
-      const amount = state.invoices
+
+      const unpaidInvoices = state.invoices
         .filter((i) => i.studentId === student.id && i.status !== "PAID")
-        .reduce((sum, i) => sum + i.amount, 0);
-      const message = `Assalamu’alaikum ${guardian.name}, tunggakan SPP ananda ${student.name}, kelas ${classroom.name}, sebesar Rp${amount.toLocaleString("id-ID")}. Mohon pelunasan sebelum ${exam.administrativeDeadline} untuk administrasi ${exam.name}. Terima kasih. SDIT AT-TAQWIM.`;
-      await audit(db, ctx, "CREATE", "whatsapp_reminder", student.id);
+        .sort((a, b) => a.month.localeCompare(b.month));
+      const amount = unpaidInvoices.reduce((sum, i) => sum + i.amount, 0);
+      const unpaidMonths = unpaidInvoices.map((i) => i.month);
+
+      const hasDispensation = state.dispensations.some(
+        (d) => d.studentId === student.id && d.status === "APPROVED",
+      );
+
+      const deadline = exam ? exam.administrativeDeadline : undefined;
+
+      const message = buildReminderMessage({
+        guardianName: guardian.name,
+        studentName: student.name,
+        className: classroom.name,
+        totalAmount: amount,
+        unpaidMonths,
+        examName: exam?.name,
+        deadline,
+        templateKey: templateParam,
+        hasDispensation,
+      });
+
+      const risk = calculateArrearsRisk(unpaidInvoices.length);
+
+      await audit(
+        db,
+        ctx,
+        "WHATSAPP_REMINDER_GENERATED",
+        "students",
+        student.id,
+        undefined,
+        {
+          amount,
+          unpaidMonthsCount: unpaidInvoices.length,
+          template: templateParam,
+          riskLevel: risk.level,
+        },
+      );
+
       return json({
+        message,
         url: `https://wa.me/${normalizePhone(guardian.phone)}?text=${encodeURIComponent(message)}`,
+        phone: normalizePhone(guardian.phone),
+        guardianName: guardian.name,
+        studentName: student.name,
+        className: classroom.name,
+        totalAmount: amount,
+        unpaidMonths,
+        risk,
       });
     }
     if (path === "audit-logs" && method === "GET") {

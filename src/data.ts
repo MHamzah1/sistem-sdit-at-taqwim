@@ -207,3 +207,176 @@ export function examParticipantNumber(
 
   return `${examCode}${yearCode}-${cleanClass}-${seqNumber}`;
 }
+
+export type RiskLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH";
+
+export type RiskInfo = {
+  level: RiskLevel;
+  label: string;
+  badgeClass: string;
+  description: string;
+};
+
+export function calculateArrearsRisk(unpaidMonths: number): RiskInfo {
+  if (unpaidMonths <= 0) {
+    return {
+      level: "NONE",
+      label: "Lancar",
+      badgeClass: "risk-none",
+      description: "Tidak ada tunggakan SPP",
+    };
+  }
+  if (unpaidMonths === 1) {
+    return {
+      level: "LOW",
+      label: "Risiko Rendah",
+      badgeClass: "risk-low",
+      description: "Tunggakan 1 bulan",
+    };
+  }
+  if (unpaidMonths === 2) {
+    return {
+      level: "MEDIUM",
+      label: "Risiko Sedang",
+      badgeClass: "risk-medium",
+      description: "Tunggakan 2 bulan",
+    };
+  }
+  return {
+    level: "HIGH",
+    label: "Risiko Tinggi",
+    badgeClass: "risk-high",
+    description: "Tunggakan ≥3 bulan (kritis ujian)",
+  };
+}
+
+export type ReminderTemplateKey =
+  | "auto"
+  | "routine"
+  | "due_date"
+  | "exam_critical"
+  | "dispensation";
+
+export type ReminderMessageParams = {
+  guardianName: string;
+  studentName: string;
+  className: string;
+  totalAmount: number;
+  unpaidMonths: string[];
+  examName?: string;
+  deadline?: string;
+  templateKey?: ReminderTemplateKey;
+  hasDispensation?: boolean;
+};
+
+export function formatMonthName(monthStr: string): string {
+  try {
+    const [year, month] = monthStr.split("-");
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    const mIdx = parseInt(month, 10) - 1;
+    if (mIdx >= 0 && mIdx < 12) {
+      return `${monthNames[mIdx]} ${year}`;
+    }
+    return monthStr.slice(0, 7);
+  } catch {
+    return monthStr;
+  }
+}
+
+export function buildReminderMessage(params: ReminderMessageParams): string {
+  const {
+    guardianName,
+    studentName,
+    className,
+    totalAmount,
+    unpaidMonths,
+    examName,
+    deadline,
+    templateKey = "auto",
+    hasDispensation = false,
+  } = params;
+
+  const count = unpaidMonths.length;
+  const formattedMonths = unpaidMonths.map(formatMonthName).join(", ");
+  const formattedAmount = "Rp" + totalAmount.toLocaleString("id-ID");
+  const defaultDeadline = deadline || "tanggal 10 bulan berjalan";
+
+  let key = templateKey;
+  if (key === "auto") {
+    if (hasDispensation) {
+      key = "dispensation";
+    } else if (count >= 3 || examName) {
+      key = "exam_critical";
+    } else if (count === 2) {
+      key = "due_date";
+    } else {
+      key = "routine";
+    }
+  }
+
+  if (key === "routine") {
+    const examNote = examName ? ` untuk administrasi *${examName}*` : "";
+    return `Assalamu’alaikum Wr. Wb. Bapak/Ibu ${guardianName},
+Semoga Bapak/Ibu sekeluarga senantiasa dalam keadaan sehat dan penuh berkah.
+
+Kami menginformasikan bahwa iuran SPP ananda *${studentName}* (Kelas ${className}) untuk bulan ${formattedMonths || "berjalan"} sebesar *${formattedAmount}* telah terbit.
+
+Pembayaran dapat dilakukan melalui transfer rekening sekolah atau langsung di kasir Tata Usaha sebelum ${defaultDeadline}${examNote}.
+
+Terima kasih atas perhatian dan kerja sama Bapak/Ibu.
+Wassalamu’alaikum Wr. Wb.
+*Tata Usaha SDIT AT-TAQWIM*`;
+  }
+
+  if (key === "due_date") {
+    const examNote = examName ? ` untuk administrasi *${examName}*` : "";
+    return `Assalamu’alaikum Wr. Wb. Bapak/Ibu ${guardianName},
+Mengingatkan kembali kewajiban administrasi SPP ananda *${studentName}* (Kelas ${className}) yang saat ini tercatat menunggak *${count} bulan* (${formattedMonths}) dengan total *${formattedAmount}*.
+
+Mohon kesediaan Bapak/Ibu untuk menyelesaikan pelunasan sebelum ${defaultDeadline}${examNote} demi kelancaran operasional pendidikan ananda.
+
+Apabila pembayaran telah dilakukan, mohon konfirmasi ke kami atau unggah bukti transfer di portal wali.
+Wassalamu’alaikum Wr. Wb.
+*Tata Usaha SDIT AT-TAQWIM*`;
+  }
+
+  if (key === "dispensation") {
+    const examNote = examName ? ` untuk administrasi *${examName}*` : "";
+    return `Assalamu’alaikum Wr. Wb. Bapak/Ibu ${guardianName},
+Menindaklanjuti pengajuan dispensasi administrasi${examNote} untuk ananda *${studentName}* (Kelas ${className}) dengan sisa tanggungan sebesar *${formattedAmount}* (${formattedMonths}).
+
+Kami mengingatkan kesepakatan komitmen pembayaran yang dijadwalkan sebelum *${defaultDeadline}*.
+
+Terima kasih atas kerja sama dan komitmen Bapak/Ibu.
+Wassalamu’alaikum Wr. Wb.
+*Tata Usaha SDIT AT-TAQWIM*`;
+  }
+
+  // exam_critical (default for high risk or exam period)
+  const examInfo = examName
+    ? `administrasi pelaksanaan *${examName}*`
+    : "administrasi ujian sekolah";
+  return `Assalamu’alaikum Wr. Wb. Bapak/Ibu ${guardianName},
+Diberitahukan dengan hormat mengenai administrasi ananda *${studentName}* (Kelas ${className}), tercatat tunggakan SPP sebanyak *${count} bulan* (${formattedMonths}) sebesar *${formattedAmount}*.
+
+Sehubungan dengan ${examInfo}, kami menghimbau pelunasan sebelum *${defaultDeadline}* agar kartu ujian ananda dapat segera diterbitkan.
+
+Bagi Bapak/Ibu yang memiliki kendala khusus, silakan segera berkoordinasi dengan pihak sekolah atau mengajukan permohonan dispensasi resmi kepada Kepala Sekolah.
+
+Terima kasih.
+Wassalamu’alaikum Wr. Wb.
+*Tata Usaha SDIT AT-TAQWIM*`;
+}
