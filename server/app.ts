@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../src/db/client";
 import * as s from "../src/db/schema";
@@ -284,6 +284,99 @@ export async function handle(
           await lockStudent(tx, data.studentId);
           return recalculate(tx, data.studentId, examId);
         }),
+      );
+    }
+    if (path === "exam-cards/bulk" && method === "POST") {
+      if (isGuardian(actor)) {
+        throw new HttpError(403, "Wali murid tidak memiliki akses cetak massal");
+      }
+      allow(actor, "read");
+      const data = z
+        .object({
+          examPeriodId: uuid,
+          classId: uuid.optional(),
+        })
+        .strict()
+        .parse(await payload(request));
+      return json(
+        await db.transaction(async (tx) => {
+          const exam = requireValue(
+            (
+              await tx
+                .select()
+                .from(s.examPeriods)
+                .where(eq(s.examPeriods.id, data.examPeriodId))
+            )[0],
+            "Periode ujian tidak ditemukan",
+          );
+          const studentConditions = [eq(s.students.active, true)];
+          if (data.classId) {
+            studentConditions.push(eq(s.students.classId, data.classId));
+          }
+          const activeStudents = await tx
+            .select()
+            .from(s.students)
+            .where(and(...studentConditions))
+            .orderBy(s.students.name);
+
+          const eligibleIds: string[] = [];
+
+          for (const student of activeStudents) {
+            await lockStudent(tx, student.id);
+            const [eligibility] = await recalculate(tx, student.id, exam.id);
+            if (
+              eligibility &&
+              ["ELIGIBLE", "ELIGIBLE_DISPENSATION"].includes(eligibility.status)
+            ) {
+              await tx
+                .insert(s.examCards)
+                .values({
+                  studentId: student.id,
+                  examPeriodId: exam.id,
+                  createdBy: actor.id,
+                })
+                .onConflictDoNothing();
+              eligibleIds.push(student.id);
+            }
+          }
+
+          const cards = eligibleIds.length
+            ? await tx
+                .select()
+                .from(s.examCards)
+                .where(
+                  and(
+                    eq(s.examCards.examPeriodId, exam.id),
+                    inArray(s.examCards.studentId, eligibleIds),
+                  ),
+                )
+            : [];
+
+          await audit(
+            tx,
+            ctx,
+            "EXAM_CARDS_BULK_GENERATED",
+            "exam_cards",
+            exam.id,
+            undefined,
+            {
+              total: activeStudents.length,
+              eligible: eligibleIds.length,
+              ineligible: activeStudents.length - eligibleIds.length,
+              classId: data.classId || null,
+            },
+          );
+
+          return {
+            exam,
+            totalStudents: activeStudents.length,
+            eligibleCount: eligibleIds.length,
+            ineligibleCount: activeStudents.length - eligibleIds.length,
+            cards,
+            eligibleStudentIds: eligibleIds,
+          };
+        }),
+        200,
       );
     }
     if (path === "exam-cards" && method === "POST") {

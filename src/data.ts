@@ -123,3 +123,87 @@ export const menuGroups = [
     ],
   },
 ];
+
+export function examParticipantNumber(
+  examName: string,
+  yearName: string,
+  className: string,
+  studentId: string,
+  classStudents: Array<{ id: string; name: string }> = [],
+): string {
+  // 1. Singkatan jenis ujian (PTS, PAS, PAT, dsb.)
+  let examCode = "UJN";
+  const upperExam = (examName || "").toUpperCase();
+  if (
+    upperExam.includes("PENILAIAN TENGAH SEMESTER") ||
+    upperExam.includes("PTS") ||
+    upperExam.includes("UTS")
+  ) {
+    examCode = "PTS";
+  } else if (
+    upperExam.includes("PENILAIAN AKHIR SEMESTER") ||
+    upperExam.includes("PAS") ||
+    upperExam.includes("UAS")
+  ) {
+    examCode = "PAS";
+  } else if (
+    upperExam.includes("PENILAIAN AKHIR TAHUN") ||
+    upperExam.includes("PAT") ||
+    upperExam.includes("UKK")
+  ) {
+    examCode = "PAT";
+  } else if (
+    upperExam.includes("UJIAN SEKOLAH") ||
+    upperExam.includes("US") ||
+    upperExam.includes("USEK")
+  ) {
+    examCode = "UAS";
+  } else {
+    const acronymMatch = upperExam.match(/\b[A-Z]{2,4}\b/);
+    if (acronymMatch) {
+      examCode = acronymMatch[0];
+    } else {
+      const words = upperExam
+        .replace(/[^A-Z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter(Boolean);
+      if (words.length > 1) {
+        examCode = words
+          .map((w) => w[0])
+          .join("")
+          .slice(0, 4);
+      } else if (words.length === 1 && words[0].length >= 3) {
+        examCode = words[0].slice(0, 3);
+      }
+    }
+  }
+
+  // 2. Tahun ajaran 2-digit (misal: "2026/2027" -> "26")
+  let yearCode = new Date().getFullYear().toString().slice(-2);
+  const yearMatch = (yearName || "").match(/20(\d{2})/);
+  if (yearMatch) {
+    yearCode = yearMatch[1];
+  } else {
+    const digitsMatch = (yearName || "").match(/(\d{2})/);
+    if (digitsMatch) {
+      yearCode = digitsMatch[1];
+    }
+  }
+
+  // 3. Nama rombel kelas yang dibersihkan (misal: "Kelas 1A" -> "1A")
+  let cleanClass = (className || "")
+    .replace(/kelas|rombel/gi, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  if (!cleanClass) cleanClass = "XX";
+
+  // 4. Nomor urut 3 digit berdasarkan urutan alfabetis nama siswa di kelas
+  const sortedStudents = [...classStudents].sort((a, b) =>
+    a.name.localeCompare(b.name, "id-ID", { sensitivity: "base" }),
+  );
+  const studentIndex = sortedStudents.findIndex((s) => s.id === studentId);
+  const seqNumber =
+    studentIndex >= 0 ? String(studentIndex + 1).padStart(3, "0") : "001";
+
+  return `${examCode}${yearCode}-${cleanClass}-${seqNumber}`;
+}

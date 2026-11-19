@@ -146,7 +146,12 @@ export const students = pgTable(
   {
     id: id(),
     nis: text("nis").notNull().unique(),
+    nisn: text("nisn"),
     name: text("name").notNull(),
+    gender: text("gender"),
+    birthPlace: text("birth_place"),
+    birthDate: date("birth_date"),
+    photoUrl: text("photo_url"),
     classId: uuid("class_id")
       .references(() => classes.id)
       .notNull(),
@@ -154,7 +159,13 @@ export const students = pgTable(
     active: boolean("active").default(true).notNull(),
     ...times(),
   },
-  (t) => [index("students_class_idx").on(t.classId)],
+  (t) => [
+    index("students_class_idx").on(t.classId),
+    check(
+      "student_gender_check",
+      sql`${t.gender} IS NULL OR ${t.gender} IN ('L', 'P')`,
+    ),
+  ],
 );
 export const guardianStudents = pgTable(
   "guardian_students",

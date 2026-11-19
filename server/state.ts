@@ -170,6 +170,10 @@ export async function readState(db: Database, actor: Actor) {
           ),
         )
     : [];
+  const examCards = await db
+    .select()
+    .from(s.examCards)
+    .where(scoped(s.examCards.studentId));
   return {
     actor,
     students,
@@ -195,6 +199,7 @@ export async function readState(db: Database, actor: Actor) {
     answers,
     promises,
     reviews,
+    examCards,
   };
 }
 export type AppState = Awaited<ReturnType<typeof readState>>;

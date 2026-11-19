@@ -13,7 +13,7 @@ import {
 import { hashPassword, verifyPassword } from "../server/security";
 import { validateSignature } from "../server/files";
 import { handle } from "../server/app";
-import { terbilang, receiptNumber } from "../src/data";
+import { terbilang, receiptNumber, examParticipantNumber } from "../src/data";
 test("eligibility checks missing invoices, old debt, and dispensations separately", () => {
   const required = monthsBetween("2026-08-15", "2026-11-01");
   assert.equal(required.length, 4);
@@ -195,6 +195,54 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
           cookie,
         );
         assert.equal(updated.status, 200);
+        await post(
+          "students",
+          {
+            name: "Invalid NISN",
+            nis: "TEST-INVALID-NISN",
+            nisn: "12345",
+            classId,
+            enrolledOn: begin,
+          },
+          cookie,
+          422,
+        );
+        await post(
+          "students",
+          {
+            name: "Invalid Gender",
+            nis: "TEST-INVALID-GENDER",
+            gender: "X",
+            classId,
+            enrolledOn: begin,
+          },
+          cookie,
+          422,
+        );
+        const updatedWithIdentity = await request(
+          `students/${studentId}`,
+          "PATCH",
+          {
+            name: "Siswa Pertama Edit",
+            nis: "TEST-1",
+            nisn: "0123456789",
+            gender: "L",
+            birthPlace: "Tangerang",
+            birthDate: "2018-05-15",
+            photoUrl: "https://example.com/student.jpg",
+            classId,
+            enrolledOn: begin,
+            active: true,
+          },
+          cookie,
+        );
+        assert.equal(updatedWithIdentity.status, 200);
+        const savedStudent = await updatedWithIdentity.json();
+        assert.equal(savedStudent.nisn, "0123456789");
+        assert.equal(savedStudent.gender, "L");
+        assert.equal(savedStudent.birthPlace, "Tangerang");
+        assert.equal(savedStudent.birthDate, "2018-05-15");
+        assert.equal(savedStudent.photoUrl, "https://example.com/student.jpg");
         const temp = await post("students", {
           name: "Temporary",
           nis: "TEST-DELETE",
@@ -685,6 +733,36 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
       },
     );
     await t.test(
+      "bulk exam card generation for eligible students in class, skips ineligible",
+      async () => {
+        await post(
+          "exam-cards/bulk",
+          { examPeriodId: examId },
+          guardianCookie,
+          403,
+        );
+        const bulkRes = await post(
+          "exam-cards/bulk",
+          { examPeriodId: examId },
+          tuCookie,
+          200,
+        );
+        assert.ok(bulkRes.totalStudents >= 2);
+        assert.ok(bulkRes.eligibleCount >= 1);
+        assert.ok(Array.isArray(bulkRes.cards));
+        assert.equal(bulkRes.cards.length, bulkRes.eligibleCount);
+
+        const classBulk = await post(
+          "exam-cards/bulk",
+          { examPeriodId: examId, classId },
+          tuCookie,
+          200,
+        );
+        assert.ok(classBulk.totalStudents >= 1);
+        assert.ok(Array.isArray(classBulk.cards));
+      },
+    );
+    await t.test(
       "WhatsApp reminder uses persisted amount, name, exam and deadline",
       async () => {
         const result = await (
@@ -793,6 +871,7 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         assert.equal(state.students.length, 2);
         assert.ok(state.payments.length >= 3);
         assert.ok(state.paymentItems.length >= 3);
+        assert.ok(Array.isArray(state.examCards));
         const invalid = await request(
           "students?page=-1",
           "GET",
@@ -800,6 +879,42 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
           cookie,
         );
         assert.equal(invalid.status, 422);
+      },
+    );
+    await t.test(
+      "exam participant number formatting is deterministic and alphabetical",
+      () => {
+        const classStudents = [
+          { id: "s-2", name: "Budi Santoso" },
+          { id: "s-1", name: "Ahmad Fauzi" },
+          { id: "s-3", name: "Citra Lestari" },
+        ];
+        const numAhmad = examParticipantNumber(
+          "Penilaian Tengah Semester 1",
+          "2026/2027",
+          "Kelas 1A",
+          "s-1",
+          classStudents,
+        );
+        assert.equal(numAhmad, "PTS26-1A-001");
+
+        const numBudi = examParticipantNumber(
+          "Penilaian Tengah Semester 1",
+          "2026/2027",
+          "Kelas 1A",
+          "s-2",
+          classStudents,
+        );
+        assert.equal(numBudi, "PTS26-1A-002");
+
+        const numCitra = examParticipantNumber(
+          "Penilaian Akhir Semester Ganjil",
+          "2026/2027",
+          "1A",
+          "s-3",
+          classStudents,
+        );
+        assert.equal(numCitra, "PAS26-1A-003");
       },
     );
   } finally {

@@ -97,6 +97,88 @@ fieldset:disabled {
 .print-card small {
   overflow-wrap: anywhere;
 }
+.participant-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.participant-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #166534;
+}
+.exam-card-media {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.student-photo-frame {
+  width: 75px;
+  height: 100px;
+  border: 1.5px solid #28734b;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.student-card-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.student-photo-placeholder {
+  width: 75px;
+  height: 100px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 4px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+.avatar-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 1px solid #cbd5e1;
+}
+.gender-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.gender-badge.gender-l {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+.gender-badge.gender-p {
+  background: #fce7f3;
+  color: #be185d;
+  border: 1px solid #fbcfe8;
+}
 .dashboard-bottom > .panel {
   min-width: 0;
 }
@@ -347,21 +429,148 @@ fieldset:disabled {
     width: 100%;
     overflow: visible;
   }
-  .app-shell:has(.print-card, .print-receipt) > .main-shell {
+  .app-shell:has(.print-card, .print-receipt, .bulk-cards-sheet) > .main-shell {
     display: none;
   }
-  .modal:has(.print-card, .print-receipt) > h2 {
+  .modal:has(.print-card, .print-receipt, .bulk-cards-sheet) > h2 {
     display: none;
   }
   .print-card,
-  .print-receipt {
-    border: 1px solid #28734b;
-    padding: 20px;
+  .print-receipt,
+  .bulk-card-item {
+    border: 1.5px solid #28734b;
+    padding: 16px;
   }
   .main-shell main {
     padding: 0;
   }
-  .badge {
+  .badge,
+  .gender-badge,
+  .student-photo-frame,
+  .student-photo-placeholder {
     print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
+  .bulk-modal-wrapper {
+    max-width: 1000px;
+    width: 95vw;
+  }
+  .bulk-summary-bar,
+  .bulk-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .bulk-summary-bar {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #166534;
+  }
+  .bulk-cards-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .bulk-card-page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #ffffff;
+    page-break-after: always;
+    break-after: page;
+  }
+  .bulk-card-item {
+    border: 1.5px solid #28734b;
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .bulk-cut-line {
+    border-top: 1.5px dashed #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 8px 0;
+    position: relative;
+  }
+  .bulk-cut-badge {
+    background: #f8fafc;
+    padding: 2px 12px;
+    font-size: 11px;
+    color: #64748b;
+    border: 1px dashed #cbd5e1;
+    border-radius: 999px;
+    margin-top: -10px;
+  }
+}
+
+.bulk-modal-wrapper {
+  max-width: 1000px;
+  width: 95vw;
+}
+.bulk-summary-bar,
+.bulk-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bulk-summary-bar {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #166534;
+}
+.bulk-cards-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.bulk-card-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #ffffff;
+}
+.bulk-card-item {
+  border: 1.5px solid #28734b;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bulk-cut-line {
+  border-top: 1.5px dashed #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8px 0;
+  position: relative;
+}
+.bulk-cut-badge {
+  background: #f8fafc;
+  padding: 2px 12px;
+  font-size: 11px;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+  border-radius: 999px;
+  margin-top: -10px;
 }

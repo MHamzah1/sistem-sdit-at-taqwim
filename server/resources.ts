@@ -35,6 +35,39 @@ const definitions = {
       .object({
         name,
         nis: z.string().trim().min(1).max(50),
+        nisn: z
+          .string()
+          .trim()
+          .refine((v) => !v || /^\d{10}$/.test(v), {
+            message: "NISN harus terdiri dari tepat 10 digit angka",
+          })
+          .nullable()
+          .optional()
+          .or(z.literal("").transform(() => null)),
+        gender: z
+          .enum(["L", "P"])
+          .nullable()
+          .optional()
+          .or(z.literal("").transform(() => null)),
+        birthPlace: z
+          .string()
+          .trim()
+          .max(100)
+          .nullable()
+          .optional()
+          .or(z.literal("").transform(() => null)),
+        birthDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal lahir YYYY-MM-DD")
+          .nullable()
+          .optional()
+          .or(z.literal("").transform(() => null)),
+        photoUrl: z
+          .string()
+          .trim()
+          .nullable()
+          .optional()
+          .or(z.literal("").transform(() => null)),
         classId: uuid,
         enrolledOn: date,
         active: z.boolean().default(true),
