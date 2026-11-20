@@ -39,6 +39,8 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "contoh-project-ulul-albab",
+    "New folder (2)"
   ]
 }
