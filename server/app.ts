@@ -50,7 +50,7 @@ async function payload(request: Request) {
   if (!request.headers.get("content-type")?.includes("application/json"))
     throw new HttpError(400, "Content-Type harus application/json");
   const text = await request.text();
-  if (text.length > 100000) throw new HttpError(413, "Payload terlalu besar");
+  if (text.length > 300000) throw new HttpError(413, "Payload terlalu besar");
   try {
     return JSON.parse(text) as unknown;
   } catch {

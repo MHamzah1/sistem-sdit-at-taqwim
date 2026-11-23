@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   ArrowLeft,
   Users,
@@ -10,6 +10,11 @@ import {
   Clock,
   Save,
   AlertTriangle,
+  Upload,
+  Trash2,
+  CheckCircle2,
+  Link2,
+  RefreshCw,
 } from "lucide-react";
 import type { AppState } from "@/server/state";
 import { calculateAge } from "@/src/lib/formatters";
@@ -83,6 +88,129 @@ export function StudentFormView({
     student?.birthDate?.slice(0, 10) || "",
   );
   const [photoUrl, setPhotoUrl] = useState(student?.photoUrl || "");
+  const [photoFileName, setPhotoFileName] = useState("");
+  const [photoError, setPhotoError] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(
+    !!student?.photoUrl && student.photoUrl.startsWith("http"),
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileProcess = (file: File) => {
+    if (!file) return;
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!validTypes.includes(file.type)) {
+      setPhotoError("Format file harus berupa gambar JPG, PNG, atau WEBP.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("Ukuran file foto maksimal 5 MB.");
+      return;
+    }
+
+    setPhotoError("");
+    setIsProcessingPhoto(true);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const targetWidth = 360;
+          const targetHeight = 480;
+          const targetRatio = 3 / 4;
+
+          const imgRatio = img.naturalWidth / img.naturalHeight;
+          let srcX = 0;
+          let srcY = 0;
+          let srcWidth = img.naturalWidth;
+          let srcHeight = img.naturalHeight;
+
+          if (imgRatio > targetRatio) {
+            srcWidth = img.naturalHeight * targetRatio;
+            srcX = (img.naturalWidth - srcWidth) / 2;
+          } else if (imgRatio < targetRatio) {
+            srcHeight = img.naturalWidth / targetRatio;
+            srcY = Math.max(0, (img.naturalHeight - srcHeight) * 0.2);
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Gagal mengolah kanvas foto");
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(
+            img,
+            srcX,
+            srcY,
+            srcWidth,
+            srcHeight,
+            0,
+            0,
+            targetWidth,
+            targetHeight,
+          );
+
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          setPhotoUrl(compressedDataUrl);
+          setPhotoFileName(file.name);
+          setShowUrlInput(false);
+        } catch {
+          setPhotoError("Gagal memproses gambar pas foto.");
+        } finally {
+          setIsProcessingPhoto(false);
+        }
+      };
+      img.onerror = () => {
+        setPhotoError("File gambar tidak valid atau rusak.");
+        setIsProcessingPhoto(false);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      setPhotoError("Gagal membaca file dari perangkat.");
+      setIsProcessingPhoto(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoUrl("");
+    setPhotoFileName("");
+    setPhotoError("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleTriggerUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileProcess(file);
+    }
+  };
 
   const existingLinkedGuardian = student
     ? guardianStudents.find((gs) => gs.studentId === student.id)?.guardianId
@@ -344,45 +472,131 @@ export function StudentFormView({
                 </div>
               </div>
               <div className="st-card-body">
-                <div className="st-photo-preview-wrap">
-                  <div className="st-photo-avatar-box">
+                <div className="st-photo-upload-container">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileProcess(file);
+                    }}
+                  />
+
+                  <div
+                    className={`st-photo-dropzone ${isDragging ? "dragging" : ""} ${photoUrl ? "has-photo" : ""}`}
+                    onClick={handleTriggerUpload}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    role="button"
+                    tabIndex={0}
+                    title={photoUrl ? "Klik untuk mengganti foto" : "Klik atau seret foto ke sini"}
+                  >
                     {photoUrl ? (
-                      <img
-                        src={photoUrl}
-                        alt="Pratinjau Foto"
-                        className="st-photo-avatar-img"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLElement).style.display = "none";
-                        }}
-                      />
+                      <div className="st-photo-3x4-frame">
+                        <img
+                          src={photoUrl}
+                          alt="Pas Foto Siswa"
+                          className="st-photo-3x4-img"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = "none";
+                          }}
+                        />
+                        <div className="st-photo-ratio-tag">3x4</div>
+                        <div className="st-photo-overlay-hover">
+                          <Upload size={16} />
+                          <span>Ganti Foto</span>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="st-photo-avatar-placeholder">
-                        {name ? name.slice(0, 1).toUpperCase() : "S"}
-                      </span>
+                      <div className="st-photo-3x4-empty">
+                        <div className="st-photo-empty-icon">
+                          <Upload size={22} />
+                        </div>
+                        <span className="st-photo-empty-title">Pilih / Seret Foto</span>
+                        <span className="st-photo-empty-sub">Standar Pas Foto 3x4</span>
+                      </div>
                     )}
                   </div>
-                  <div className="st-photo-info">
-                    <label style={{ width: "100%", marginBottom: 0 }}>
-                      <span style={{ fontSize: 11 }}>
-                        URL Pas Foto Siswa (Opsional)
-                      </span>
-                      <input
-                        type="url"
-                        placeholder="https://.../foto-siswa.jpg"
-                        value={photoUrl}
-                        onChange={(e) => setPhotoUrl(e.target.value)}
-                      />
-                    </label>
-                    <small
-                      style={{
-                        color: "var(--muted)",
-                        display: "block",
-                        marginTop: 4,
-                      }}
+
+                  {isProcessingPhoto && (
+                    <div className="st-photo-processing">
+                      <RefreshCw size={13} className="st-spin" />
+                      <span>Mengoptimalkan ukuran pas foto...</span>
+                    </div>
+                  )}
+
+                  {photoError && (
+                    <div className="st-photo-error">
+                      <AlertTriangle size={14} />
+                      <span>{photoError}</span>
+                    </div>
+                  )}
+
+                  <div className="st-photo-actions">
+                    <button
+                      type="button"
+                      className="st-btn-upload-photo"
+                      onClick={handleTriggerUpload}
+                      disabled={isProcessingPhoto}
                     >
-                      Gunakan format pas foto standar rasio 3x4 (JPG, PNG, atau WEBP).
-                    </small>
+                      <Upload size={14} />
+                      {photoUrl ? "Ganti Foto" : "Unggah Foto Siswa"}
+                    </button>
+
+                    {photoUrl && (
+                      <button
+                        type="button"
+                        className="st-btn-remove-photo"
+                        onClick={handleRemovePhoto}
+                        title="Hapus pas foto"
+                      >
+                        <Trash2 size={14} />
+                        Hapus
+                      </button>
+                    )}
                   </div>
+
+                  {photoFileName && photoUrl && (
+                    <div className="st-photo-filename-badge">
+                      <CheckCircle2 size={12} />
+                      <span className="st-photo-filename-text">{photoFileName}</span>
+                    </div>
+                  )}
+
+                  <div className="st-photo-helper-text">
+                    Gunakan format pas foto standar rasio 3x4 (JPG, PNG, atau WEBP, maks. 5 MB). Otomatis dipotong dan dioptimalkan untuk kartu ujian.
+                  </div>
+
+                  <div className="st-photo-url-toggle">
+                    <button
+                      type="button"
+                      className="st-btn-link-subtle"
+                      onClick={() => setShowUrlInput(!showUrlInput)}
+                    >
+                      <Link2 size={12} />
+                      {showUrlInput ? "Sembunyikan Input URL" : "Atau gunakan tautan URL gambar"}
+                    </button>
+                  </div>
+
+                  {showUrlInput && (
+                    <div className="st-photo-url-field">
+                      <label style={{ width: "100%", marginBottom: 0 }}>
+                        <span style={{ fontSize: 11 }}>URL Pas Foto Siswa (Opsional)</span>
+                        <input
+                          type="url"
+                          placeholder="https://.../foto-siswa.jpg"
+                          value={photoUrl.startsWith("data:") ? "" : photoUrl}
+                          onChange={(e) => {
+                            setPhotoUrl(e.target.value);
+                            setPhotoFileName("");
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

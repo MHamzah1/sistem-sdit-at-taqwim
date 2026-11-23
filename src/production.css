@@ -1714,6 +1714,262 @@ fieldset:disabled {
   width: 100%;
 }
 
+/* Upload Pas Foto Siswa */
+.st-photo-upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.st-photo-dropzone {
+  width: 120px;
+  height: 160px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  background: #f8faf9;
+  border: 2px dashed #93c5aa;
+  box-shadow: 0 2px 8px rgba(23, 100, 66, 0.04);
+}
+
+.st-photo-dropzone:hover {
+  border-color: #176442;
+  background: #edf7f1;
+}
+
+.st-photo-dropzone.dragging {
+  border-color: #176442;
+  background: #dff0e6;
+  border-style: solid;
+  transform: scale(1.02);
+}
+
+.st-photo-dropzone.has-photo {
+  border-style: solid;
+  border-color: #176442;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(23, 100, 66, 0.12);
+}
+
+.st-photo-3x4-frame {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.st-photo-3x4-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.st-photo-ratio-tag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(23, 100, 66, 0.88);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  backdrop-filter: blur(2px);
+}
+
+.st-photo-overlay-hover {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 55, 38, 0.65);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.st-photo-dropzone:hover .st-photo-overlay-hover {
+  opacity: 1;
+}
+
+.st-photo-3x4-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  gap: 6px;
+}
+
+.st-photo-empty-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #eaf4ee;
+  color: #176442;
+  display: grid;
+  place-items: center;
+}
+
+.st-photo-empty-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #176442;
+}
+
+.st-photo-empty-sub {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.st-photo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.st-btn-upload-photo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: #176442;
+  color: #ffffff;
+  border: 1px solid #176442;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.st-btn-upload-photo:hover:not(:disabled) {
+  background: #125235;
+  border-color: #125235;
+}
+
+.st-btn-upload-photo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.st-btn-remove-photo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.st-btn-remove-photo:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+}
+
+.st-photo-filename-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #176442;
+  background: #eaf4ee;
+  padding: 3px 10px;
+  border-radius: 12px;
+  max-width: 95%;
+}
+
+.st-photo-filename-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-photo-helper-text {
+  font-size: 11px;
+  color: var(--muted, #64748b);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.st-photo-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #be123c;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  padding: 6px 10px;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.st-photo-processing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #176442;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.st-btn-link-subtle {
+  background: none;
+  border: none;
+  color: #176442;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.st-btn-link-subtle:hover {
+  color: #0d3e28;
+}
+
+.st-photo-url-field {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.st-spin {
+  animation: st-spin 0.8s linear infinite;
+}
+
 .st-guardian-options {
   display: flex;
   flex-direction: column;

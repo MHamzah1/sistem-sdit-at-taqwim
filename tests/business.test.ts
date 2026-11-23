@@ -248,6 +248,23 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         assert.equal(savedStudent.birthPlace, "Tangerang");
         assert.equal(savedStudent.birthDate, "2018-05-15");
         assert.equal(savedStudent.photoUrl, "https://example.com/student.jpg");
+        const samplePhotoDataUrl =
+          "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+        const updatedWithPhotoDataUrl = await request(
+          `students/${studentId}`,
+          "PATCH",
+          {
+            name: "Siswa Pertama Edit",
+            nis: "TEST-1",
+            photoUrl: samplePhotoDataUrl,
+            classId,
+            enrolledOn: begin,
+          },
+          cookie,
+        );
+        assert.equal(updatedWithPhotoDataUrl.status, 200);
+        const studentWithDataUrl = await updatedWithPhotoDataUrl.json();
+        assert.equal(studentWithDataUrl.photoUrl, samplePhotoDataUrl);
         const temp = await post("students", {
           name: "Temporary",
           nis: "TEST-DELETE",
