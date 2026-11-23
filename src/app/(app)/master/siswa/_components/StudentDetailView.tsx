@@ -459,7 +459,7 @@ export function StudentDetailView({
           </nav>
         </aside>
 
-        <main className="st-detail-content">
+        <section className="st-detail-content">
           {activeTab === "ringkasan" && (
             <div className="st-tab-panel">
               <div className="st-section-card">
@@ -846,207 +846,208 @@ export function StudentDetailView({
                 </div>
 
                 <div className="st-section-card__body">
-                  <div className="st-exam-eval-box">
-                    <h4>Audit 3 Syarat Kelayakan Ujian:</h4>
-                    <div className="st-eval-checklist">
-                      <div className="st-eval-check-item">
-                        <span
-                          className={`st-check-icon ${
-                            totalArrears === 0 ? "is-valid" : "is-invalid"
-                          }`}
-                        >
-                          {totalArrears === 0 ? "✓" : "✕"}
-                        </span>
-                        <div>
-                          <strong>Syarat 1: SPP Lunas</strong>
-                          <small>
-                            {totalArrears === 0
-                              ? "SPP siswa lunas hingga bulan berjalan"
-                              : `Terdapat ${unpaidInvoices.length} invoice belum lunas (${money(
-                                  totalArrears,
-                                )})`}
-                          </small>
-                        </div>
-                      </div>
+                  <div className="st-exam-tab-grid">
+                    <div className="st-exam-eval-col">
+                      <div className="st-exam-eval-box">
+                        <h4>Audit 3 Syarat Kelayakan Ujian:</h4>
+                        <div className="st-eval-checklist">
+                          <div className="st-eval-check-item">
+                            <span
+                              className={`st-check-icon ${
+                                totalArrears === 0 ? "is-valid" : "is-invalid"
+                              }`}
+                            >
+                              {totalArrears === 0 ? "✓" : "✕"}
+                            </span>
+                            <div>
+                              <strong>Syarat 1: SPP Lunas</strong>
+                              <small>
+                                {totalArrears === 0
+                                  ? "SPP siswa lunas hingga bulan berjalan"
+                                  : `Terdapat ${unpaidInvoices.length} invoice belum lunas (${money(
+                                      totalArrears,
+                                    )})`}
+                              </small>
+                            </div>
+                          </div>
 
-                      <div className="st-eval-check-item">
-                        <span
-                          className={`st-check-icon ${
-                            examDispensation?.status === "APPROVED"
-                              ? "is-valid"
-                              : "is-neutral"
-                          }`}
-                        >
-                          {examDispensation?.status === "APPROVED" ? "✓" : "—"}
-                        </span>
-                        <div>
-                          <strong>
-                            Syarat 2: Izin Dispensasi Kepala Sekolah
-                          </strong>
-                          <small>
-                            {examDispensation?.status === "APPROVED"
-                              ? "Dispensasi telah disetujui Kepala Sekolah"
-                              : "Tidak ada pengajuan dispensasi aktif"}
-                          </small>
-                        </div>
-                      </div>
+                          <div className="st-eval-check-item">
+                            <span
+                              className={`st-check-icon ${
+                                examDispensation?.status === "APPROVED"
+                                  ? "is-valid"
+                                  : "is-neutral"
+                              }`}
+                            >
+                              {examDispensation?.status === "APPROVED" ? "✓" : "—"}
+                            </span>
+                            <div>
+                              <strong>
+                                Syarat 2: Izin Dispensasi Kepala Sekolah
+                              </strong>
+                              <small>
+                                {examDispensation?.status === "APPROVED"
+                                  ? "Dispensasi telah disetujui Kepala Sekolah"
+                                  : "Tidak ada pengajuan dispensasi aktif"}
+                              </small>
+                            </div>
+                          </div>
 
-                      <div className="st-eval-check-item">
-                        <span
-                          className={`st-check-icon ${
-                            student.active ? "is-valid" : "is-invalid"
-                          }`}
-                        >
-                          {student.active ? "✓" : "✕"}
-                        </span>
-                        <div>
-                          <strong>Syarat 3: Status Siswa Aktif</strong>
-                          <small>
-                            {student.active
-                              ? "Status siswa aktif terdaftar di sekolah"
-                              : "Siswa tidak aktif"}
-                          </small>
+                          <div className="st-eval-check-item">
+                            <span
+                              className={`st-check-icon ${
+                                student.active ? "is-valid" : "is-invalid"
+                              }`}
+                            >
+                              {student.active ? "✓" : "✕"}
+                            </span>
+                            <div>
+                              <strong>Syarat 3: Status Siswa Aktif</strong>
+                              <small>
+                                {student.active
+                                  ? "Status siswa aktif terdaftar di sekolah"
+                                  : "Siswa tidak aktif"}
+                              </small>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="st-eval-verdict">
+                          <span>Vonis Kelayakan Saat Ini:</span>
+                          <Badge
+                            status={examEligibility?.status || "NOT_EVALUATED"}
+                          />
                         </div>
                       </div>
                     </div>
 
-                    <div className="st-eval-verdict">
-                      <span>Vonis Kelayakan Saat Ini:</span>
-                      <Badge
-                        status={examEligibility?.status || "NOT_EVALUATED"}
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                    className="st-exam-card-preview-wrap"
-                    style={{ marginTop: 24 }}
-                  >
-                    <div className="st-exam-card">
-                      <div className="st-exam-card__header">
-                        <div style={{ textAlign: "center", width: "100%" }}>
-                          <h4
-                            style={{
-                              margin: 0,
-                              fontSize: 13,
-                              color: "#16613e",
-                            }}
-                          >
-                            SDIT AT-TAQWIM BEKASI
-                          </h4>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "var(--ink)",
-                            }}
-                          >
-                            KARTU PESERTA UJIAN RESMI
-                          </span>
-                          <small
-                            style={{
-                              display: "block",
-                              color: "var(--muted)",
-                              fontSize: 9,
-                            }}
-                          >
-                            {activeExam ? activeExam.name : "Penilaian Semester"}{" "}
-                            · TA {studentYear?.name || "2026/2027"}
-                          </small>
+                    <div className="st-exam-card-col">
+                      <div className="st-exam-card">
+                        <div className="st-exam-card__header">
+                          <div style={{ textAlign: "center", width: "100%" }}>
+                            <h4
+                              style={{
+                                margin: 0,
+                                fontSize: 13,
+                                color: "#16613e",
+                              }}
+                            >
+                              SDIT AT-TAQWIM BEKASI
+                            </h4>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--ink)",
+                              }}
+                            >
+                              KARTU PESERTA UJIAN RESMI
+                            </span>
+                            <small
+                              style={{
+                                display: "block",
+                                color: "var(--muted)",
+                                fontSize: 9,
+                              }}
+                            >
+                              {activeExam ? activeExam.name : "Penilaian Semester"}{" "}
+                              · TA {studentYear?.name || "2026/2027"}
+                            </small>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="st-exam-card__body">
-                        <div className="st-exam-card__left">
-                          <div className="st-card-photo-box">
-                            {student.photoUrl ? (
-                              <img
-                                src={student.photoUrl}
-                                alt={student.name}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "cover",
-                                }}
-                              />
-                            ) : (
-                              <span>3x4 Foto</span>
+                        <div className="st-exam-card__body">
+                          <div className="st-exam-card__left">
+                            <div className="st-card-photo-box">
+                              {student.photoUrl ? (
+                                <img
+                                  src={student.photoUrl}
+                                  alt={student.name}
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : (
+                                <span>3x4 Foto</span>
+                              )}
+                            </div>
+                            {qrCodeUrl && (
+                              <div className="st-card-qr-box">
+                                <img src={qrCodeUrl} alt="QR Code Verifikasi" />
+                                <small>Pindai untuk validasi</small>
+                              </div>
                             )}
                           </div>
-                          {qrCodeUrl && (
-                            <div className="st-card-qr-box">
-                              <img src={qrCodeUrl} alt="QR Code Verifikasi" />
-                              <small>Pindai untuk validasi</small>
-                            </div>
-                          )}
+
+                          <div className="st-exam-card__right">
+                            <table className="st-mini-table">
+                              <tbody>
+                                <tr>
+                                  <td>Nama Siswa</td>
+                                  <td>:</td>
+                                  <td>
+                                    <strong>{student.name}</strong>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td>No. Peserta</td>
+                                  <td>:</td>
+                                  <td>
+                                    <span className="participant-badge">
+                                      {participantNum}
+                                    </span>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td>NIS / NISN</td>
+                                  <td>:</td>
+                                  <td>
+                                    {student.nis} / {student.nisn || "—"}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td>Kelas</td>
+                                  <td>:</td>
+                                  <td>
+                                    {studentClass ? studentClass.name : "—"}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td>Tempat / Tgl Lahir</td>
+                                  <td>:</td>
+                                  <td>
+                                    {student.birthPlace || "Bekasi"},{" "}
+                                    {formatDateIndo(student.birthDate)}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td>Status Kelayakan</td>
+                                  <td>:</td>
+                                  <td>
+                                    <Badge
+                                      status={
+                                        examEligibility?.status || "NOT_EVALUATED"
+                                      }
+                                    />
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
 
-                        <div className="st-exam-card__right">
-                          <table className="st-mini-table">
-                            <tbody>
-                              <tr>
-                                <td>Nama Siswa</td>
-                                <td>:</td>
-                                <td>
-                                  <strong>{student.name}</strong>
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>No. Peserta</td>
-                                <td>:</td>
-                                <td>
-                                  <span className="participant-badge">
-                                    {participantNum}
-                                  </span>
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>NIS / NISN</td>
-                                <td>:</td>
-                                <td>
-                                  {student.nis} / {student.nisn || "—"}
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>Kelas</td>
-                                <td>:</td>
-                                <td>
-                                  {studentClass ? studentClass.name : "—"}
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>Tempat / Tgl Lahir</td>
-                                <td>:</td>
-                                <td>
-                                  {student.birthPlace || "Bekasi"},{" "}
-                                  {formatDateIndo(student.birthDate)}
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>Status Kelayakan</td>
-                                <td>:</td>
-                                <td>
-                                  <Badge
-                                    status={
-                                      examEligibility?.status || "NOT_EVALUATED"
-                                    }
-                                  />
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                        <div className="st-exam-card__footer">
+                          <button
+                            type="button"
+                            className="primary tiny"
+                            onClick={() => onPrintCard(student)}
+                          >
+                            <Printer size={13} />
+                            Cetak Kartu Ujian Siswa
+                          </button>
                         </div>
-                      </div>
-
-                      <div className="st-exam-card__footer">
-                        <button
-                          type="button"
-                          className="primary tiny"
-                          onClick={() => onPrintCard(student)}
-                        >
-                          <Printer size={13} />
-                          Cetak Kartu Ujian Siswa
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1155,7 +1156,7 @@ export function StudentDetailView({
               </div>
             </div>
           )}
-        </main>
+        </section>
       </div>
     </div>
   );

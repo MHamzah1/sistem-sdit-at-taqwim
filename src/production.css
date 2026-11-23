@@ -852,11 +852,10 @@ fieldset:disabled {
 }
 
 .st-profile-card__avatar {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  border: 3px solid #e8f2ec;
-  outline: 2px solid #176442;
+  width: 96px;
+  height: 128px;
+  border-radius: 8px;
+  border: 2px solid #176442;
   background: #f0f6f2;
   display: grid;
   place-items: center;
@@ -1054,6 +1053,7 @@ fieldset:disabled {
   gap: 16px;
   align-items: flex-start;
   margin-top: 4px;
+  width: 100%;
 }
 
 .st-detail-sidebar {
@@ -1186,9 +1186,13 @@ fieldset:disabled {
 /* Detail Content Panel */
 .st-detail-content {
   min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .st-tab-panel {
+  width: 100%;
   animation: stFadeIn 0.2s ease-out;
 }
 
@@ -1204,6 +1208,7 @@ fieldset:disabled {
 }
 
 .st-section-card {
+  width: 100%;
   background: #ffffff;
   border: 1px solid #e1e7e3;
   border-radius: 9px;
@@ -1248,6 +1253,7 @@ fieldset:disabled {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
 }
 
 .st-summary-box {
@@ -1328,8 +1334,9 @@ fieldset:disabled {
 
 .st-wali-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  width: 100%;
 }
 
 .st-wali-card {
@@ -1392,13 +1399,15 @@ fieldset:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 30px 16px;
+  padding: 36px 20px;
   background: #f9fbf9;
   border: 1px dashed #dbe3dd;
   border-radius: 8px;
   color: #8c9b91;
   text-align: center;
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .st-empty-state p {
@@ -1413,6 +1422,7 @@ fieldset:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+  width: 100%;
 }
 
 .st-stat-box {
@@ -1522,10 +1532,34 @@ fieldset:disabled {
   color: #4b5d52;
 }
 
+/* Tab 3: Ujian Evaluation & Card Split Grid */
+.st-exam-tab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.st-exam-eval-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.st-exam-card-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
 /* Exam Card Box */
 .st-exam-card {
-  max-width: 540px;
-  margin: auto;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
   background: #ffffff;
   border: 2px solid #176442;
   border-radius: 10px;
@@ -2027,6 +2061,10 @@ fieldset:disabled {
   }
   .st-summary-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  .st-exam-tab-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 }
 
