@@ -78,9 +78,11 @@ export function PaymentModal({
       <form onSubmit={submit} className="space-y-4">
         <fieldset disabled={busy} className="space-y-4 border-0 p-0 m-0">
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-foreground/90">
-              Pilih Siswa
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Pilih Siswa
+              </label>
+            </div>
             <Select
               required
               value={studentId}
@@ -99,9 +101,11 @@ export function PaymentModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-foreground/90">
-              Metode Pembayaran
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Metode Pembayaran
+              </label>
+            </div>
             <Select value={method} onChange={(e) => setMethod(e.target.value)}>
               {!guardian && <option value="CASH">Tunai (Kasir Sekolah)</option>}
               <option value="TRANSFER">Transfer Bank</option>
@@ -109,9 +113,11 @@ export function PaymentModal({
           </div>
 
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-foreground/90">
-              Daftar Tagihan Belum Lunas
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Daftar Tagihan Belum Lunas
+              </label>
+            </div>
             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
               {available.map((i) => {
                 const isChecked = selected.includes(i.id);
@@ -119,7 +125,7 @@ export function PaymentModal({
                   <label
                     key={i.id}
                     className={cn(
-                      "flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer text-xs",
+                      "flex flex-row items-center justify-between p-3 rounded-lg border transition-all cursor-pointer text-xs !mb-0",
                       isChecked
                         ? "bg-primary/5 border-primary/40 shadow-2xs"
                         : "bg-card border-border/70 hover:bg-muted/40"
@@ -165,9 +171,11 @@ export function PaymentModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-foreground/90">
-              Tanggal Pembayaran
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Tanggal Pembayaran
+              </label>
+            </div>
             <Input
               type="date"
               name="paidOn"
@@ -178,28 +186,33 @@ export function PaymentModal({
 
           {method === "TRANSFER" && (
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-foreground/90">
-                Unggah Bukti Transfer
-              </label>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Unggah Bukti Transfer
+                </label>
+              </div>
               <Input
                 type="file"
                 name="proof"
                 accept="image/*,application/pdf"
                 required
-                className="cursor-pointer file:cursor-pointer file:mr-3 file:py-0.5 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                className="cursor-pointer file:cursor-pointer file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
               />
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-foreground/90">
-              Catatan Transaksi (Opsional)
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Catatan Transaksi (Opsional)
+              </label>
+            </div>
             <textarea
               name="notes"
               placeholder="Nomor referensi atau catatan tambahan..."
               rows={2}
-              className="flex w-full rounded-lg border border-input bg-card px-3 py-2 text-xs text-foreground shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 resize-y"
+              data-slot="textarea"
+              className="block w-full min-w-0 rounded-lg border border-input bg-card px-3.5 py-2.5 text-xs sm:text-sm text-foreground shadow-xs transition-all duration-150 outline-none leading-normal focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 resize-y"
             />
           </div>
 
@@ -216,8 +229,9 @@ export function PaymentModal({
           <div className="pt-2">
             <Button
               type="submit"
+              variant="default"
               disabled={!selected.length || busy}
-              className="w-full h-10 text-xs font-semibold shadow-sm"
+              className="w-full h-10 text-xs sm:text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {busy ? (
                 <>

@@ -26,7 +26,7 @@ export function Modal({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="text-xs text-foreground space-y-4">{children}</div>
+        <div className="text-foreground space-y-4">{children}</div>
       </DialogContent>
     </Dialog>
   );

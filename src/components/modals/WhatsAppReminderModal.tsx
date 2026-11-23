@@ -203,9 +203,10 @@ export function WhatsAppReminderModal({
           <textarea
             id="wa-message-textarea"
             rows={8}
+            data-slot="textarea"
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            className="flex w-full rounded-lg border border-input bg-card p-3 font-mono text-xs text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 leading-relaxed resize-y"
+            className="block w-full min-w-0 rounded-lg border border-input bg-card p-3 font-mono text-xs text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 leading-relaxed resize-y"
           />
         </div>
 

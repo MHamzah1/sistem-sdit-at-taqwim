@@ -99,15 +99,19 @@ export function DataForm({
 
             return (
               <div key={field.key} className="space-y-1.5">
-                <label
-                  htmlFor={field.key}
-                  className="block text-xs font-semibold text-foreground/90"
-                >
-                  {field.label}
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label
+                    htmlFor={field.key}
+                    className="text-xs font-semibold text-foreground cursor-pointer"
+                  >
+                    {field.label}
+                  </label>
                   {field.required !== false && (
-                    <span className="text-destructive ml-1">*</span>
+                    <span className="text-destructive font-bold text-xs select-none leading-none" title="Wajib diisi">
+                      *
+                    </span>
                   )}
-                </label>
+                </div>
 
                 {field.options ? (
                   <Select
@@ -133,7 +137,8 @@ export function DataForm({
                     required={field.required !== false}
                     maxLength={3000}
                     rows={4}
-                    className="flex w-full rounded-lg border border-input bg-card px-3 py-2 text-xs text-foreground shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 resize-y"
+                    data-slot="textarea"
+                    className="block w-full min-w-0 rounded-lg border border-input bg-card px-3.5 py-2.5 text-xs sm:text-sm text-foreground shadow-xs transition-all duration-150 outline-none leading-normal focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 resize-y"
                   />
                 ) : (
                   <Input
@@ -168,8 +173,9 @@ export function DataForm({
           <div className="pt-2">
             <Button
               type="submit"
+              variant="default"
               disabled={busy}
-              className="w-full h-10 text-xs font-semibold shadow-sm"
+              className="w-full h-10 text-xs sm:text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {busy ? (
                 <>
