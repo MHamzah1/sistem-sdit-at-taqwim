@@ -17,40 +17,6 @@ import {
   Globe,
 } from "lucide-react";
 
-interface QuickRole {
-  label: string;
-  roleTitle: string;
-  email: string;
-  pass: string;
-}
-
-const QUICK_ROLES: QuickRole[] = [
-  {
-    label: "Admin",
-    roleTitle: "Super Admin",
-    email: "admin@attaqwim.sch.id",
-    pass: "admin12345678",
-  },
-  {
-    label: "Tata Usaha",
-    roleTitle: "TU & Keuangan",
-    email: "tu@attaqwim.sch.id",
-    pass: "tu12345678",
-  },
-  {
-    label: "Kepsek",
-    roleTitle: "Kepala Sekolah",
-    email: "kepsek@attaqwim.sch.id",
-    pass: "kepsek12345678",
-  },
-  {
-    label: "Wali Murid",
-    roleTitle: "Orang Tua / Wali",
-    email: "wali@attaqwim.sch.id",
-    pass: "wali12345678",
-  },
-];
-
 export default function MasukPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -79,12 +45,6 @@ export default function MasukPage() {
         }
       }
     });
-  };
-
-  const handleQuickFill = (targetEmail: string, targetPass: string) => {
-    setEmail(targetEmail);
-    setPassword(targetPass);
-    setError("");
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -353,27 +313,6 @@ export default function MasukPage() {
                 )}
               </button>
             </form>
-
-            {/* Quick Testing Role Selector */}
-            <div className="payoneer-quick-row">
-              <span className="payoneer-quick-label">Akses Cepat Pengujian:</span>
-              <div className="payoneer-quick-chips">
-                {QUICK_ROLES.map((role) => (
-                  <button
-                    key={role.email}
-                    type="button"
-                    className={`payoneer-chip ${
-                      email === role.email ? "active" : ""
-                    }`}
-                    onClick={() => handleQuickFill(role.email, role.pass)}
-                    title={`Gunakan akun demo ${role.roleTitle}`}
-                    disabled={busy}
-                  >
-                    <span>{role.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Right Bottom Footer Bar */}

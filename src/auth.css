@@ -566,32 +566,8 @@ form .payoneer-remember-label,
   box-shadow: none !important;
 }
 
-/* Quick Role Selector (Discrete Pills) */
-.payoneer-quick-row {
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid #f1f5f9;
-  text-align: left;
-}
-
-.payoneer-quick-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  display: block;
-  margin-bottom: 8px;
-}
-
-.payoneer-quick-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .payoneer-chip {
-  padding: 5px 12px !important;
+  padding: 8px 16px !important;
   border-radius: 9999px !important;
   background: #f8fafc !important;
   border: 1px solid #e2e8f0 !important;
