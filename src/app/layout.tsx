@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "@/src/styles.css";
 import "@/src/production.css";
+import "@/src/auth.css";
 
 export const metadata: Metadata = {
   title: "SDIT AT-TAQWIM — Sistem SPP & Kelayakan Ujian",
