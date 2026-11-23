@@ -3,8 +3,13 @@
 import React, { useState, type FormEvent } from "react";
 import type { AppState } from "@/server/state";
 import { Modal } from "../Modal";
+import { Select } from "../ui/select";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
 import { money } from "@/src/lib/formatters";
 import { api, uploadProof } from "@/src/lib/api";
+import { Loader2, AlertCircle, ReceiptText, Check } from "lucide-react";
+import { cn } from "@/src/lib/utils";
 
 interface PaymentModalProps {
   data: AppState;
@@ -32,10 +37,14 @@ export function PaymentModal({
       i.studentId === studentId && ["UNPAID", "OVERDUE"].includes(i.status),
   );
 
+  const totalSelectedAmount = available
+    .filter((i) => selected.includes(i.id))
+    .reduce((sum, i) => sum + i.amount, 0);
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selected.length) {
-      setError("Pilih minimal satu invoice");
+      setError("Pilih minimal satu tagihan untuk dibayar");
       return;
     }
     setBusy(true);
@@ -65,12 +74,14 @@ export function PaymentModal({
   }
 
   return (
-    <Modal title="Catat pembayaran SPP" close={() => !busy && close()}>
-      <form onSubmit={submit}>
-        <fieldset disabled={busy}>
-          <label>
-            Siswa
-            <select
+    <Modal title="Catat Pembayaran SPP" close={() => !busy && close()}>
+      <form onSubmit={submit} className="space-y-4">
+        <fieldset disabled={busy} className="space-y-4 border-0 p-0 m-0">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-foreground/90">
+              Pilih Siswa
+            </label>
+            <Select
               required
               value={studentId}
               onChange={(e) => {
@@ -78,76 +89,146 @@ export function PaymentModal({
                 setSelected([]);
               }}
             >
-              <option value="">Pilih siswa</option>
+              <option value="">Pilih siswa...</option>
               {data.students.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} · {s.nis}
+                  {s.name} · NIS: {s.nis}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Metode
-            <select value={method} onChange={(e) => setMethod(e.target.value)}>
-              {!guardian && <option value="CASH">Tunai</option>}
-              <option value="TRANSFER">Transfer</option>
-            </select>
-          </label>
-          <div className="invoice-picker">
-            {available.map((i) => (
-              <label className="invoice-choice" key={i.id}>
-                <input
-                  type="checkbox"
-                  checked={selected.includes(i.id)}
-                  onChange={(e) =>
-                    setSelected((ids) =>
-                      e.target.checked
-                        ? [...ids, i.id]
-                        : ids.filter((id) => id !== i.id),
-                    )
-                  }
-                />
-                <span>
-                  Bulan {i.month.slice(0, 7)} · {money(i.amount)}
-                </span>
-              </label>
-            ))}
-            {!available.length && (
-              <p>Tidak ada tagihan tertunggak untuk siswa ini.</p>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-foreground/90">
+              Metode Pembayaran
+            </label>
+            <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+              {!guardian && <option value="CASH">Tunai (Kasir Sekolah)</option>}
+              <option value="TRANSFER">Transfer Bank</option>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-foreground/90">
+              Daftar Tagihan Belum Lunas
+            </label>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {available.map((i) => {
+                const isChecked = selected.includes(i.id);
+                return (
+                  <label
+                    key={i.id}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer text-xs",
+                      isChecked
+                        ? "bg-primary/5 border-primary/40 shadow-2xs"
+                        : "bg-card border-border/70 hover:bg-muted/40"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) =>
+                          setSelected((ids) =>
+                            e.target.checked
+                              ? [...ids, i.id]
+                              : ids.filter((id) => id !== i.id),
+                          )
+                        }
+                        className="size-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
+                      />
+                      <span className="font-medium text-foreground">
+                        Bulan {i.month.slice(0, 7)}
+                      </span>
+                    </div>
+                    <strong className="font-semibold text-primary">
+                      {money(i.amount)}
+                    </strong>
+                  </label>
+                );
+              })}
+              {!available.length && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/20 text-xs text-muted-foreground">
+                  <ReceiptText className="size-4 shrink-0 text-muted-foreground/70" />
+                  <span>Tidak ada tagihan tertunggak untuk siswa ini.</span>
+                </div>
+              )}
+            </div>
+
+            {selected.length > 0 && (
+              <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/10 text-primary font-medium text-xs">
+                <span>Total Dipilih ({selected.length} tagihan):</span>
+                <span className="text-sm font-bold">{money(totalSelectedAmount)}</span>
+              </div>
             )}
           </div>
-          <label>
-            Tanggal bayar
-            <input
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-foreground/90">
+              Tanggal Pembayaran
+            </label>
+            <Input
               type="date"
               name="paidOn"
               defaultValue={new Date().toISOString().slice(0, 10)}
               required
             />
-          </label>
+          </div>
+
           {method === "TRANSFER" && (
-            <label>
-              Bukti transfer
-              <input
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-foreground/90">
+                Unggah Bukti Transfer
+              </label>
+              <Input
                 type="file"
                 name="proof"
                 accept="image/*,application/pdf"
                 required
+                className="cursor-pointer file:cursor-pointer file:mr-3 file:py-0.5 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
               />
-            </label>
+            </div>
           )}
-          <label>
-            Catatan
-            <textarea name="notes" placeholder="Catatan transaksi..." />
-          </label>
-          {error && <div className="notice red">{error}</div>}
-          <button
-            type="submit"
-            className="primary"
-            disabled={!selected.length || busy}
-          >
-            {busy ? "Menyimpan..." : "Simpan pembayaran"}
-          </button>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-foreground/90">
+              Catatan Transaksi (Opsional)
+            </label>
+            <textarea
+              name="notes"
+              placeholder="Nomor referensi atau catatan tambahan..."
+              rows={2}
+              className="flex w-full rounded-lg border border-input bg-card px-3 py-2 text-xs text-foreground shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 resize-y"
+            />
+          </div>
+
+          {error && (
+            <div
+              className="flex items-center gap-2 p-3 text-xs rounded-lg border border-destructive/20 bg-destructive/10 text-destructive font-medium"
+              role="alert"
+            >
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="pt-2">
+            <Button
+              type="submit"
+              disabled={!selected.length || busy}
+              className="w-full h-10 text-xs font-semibold shadow-sm"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-1.5" />
+                  Menyimpan Transaksi...
+                </>
+              ) : (
+                "Simpan Pembayaran"
+              )}
+            </Button>
+          </div>
         </fieldset>
       </form>
     </Modal>

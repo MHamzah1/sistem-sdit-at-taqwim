@@ -23,6 +23,8 @@
     "@neondatabase/serverless": "^1.1.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@vercel/blob": "^2.8.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.577.0",
@@ -31,6 +33,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.7.1",
     "ws": "^8.21.3",
     "zod": "^4.6.2"
   },

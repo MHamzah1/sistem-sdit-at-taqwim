@@ -1,43 +1,33 @@
 "use client";
 
-import React, { type ReactNode, useEffect } from "react";
-import { X } from "lucide-react";
+import React, { type ReactNode } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { cn } from "@/src/lib/utils";
 
 export function Modal({
   title,
   children,
   close,
+  className,
 }: {
   title: string;
   children: ReactNode;
   close: () => void;
+  className?: string;
 }) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [close]);
-
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <button
-          className="modal-close icon-btn no-print"
-          aria-label="Tutup"
-          onClick={close}
-        >
-          <X size={20} />
-        </button>
-        <h2>{title}</h2>
-        {children}
-      </section>
-    </div>
+    <Dialog open={true} onOpenChange={(open) => !open && close()}>
+      <DialogContent onClose={close} className={cn("max-w-xl", className)}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="text-xs text-foreground space-y-4">{children}</div>
+      </DialogContent>
+    </Dialog>
   );
 }

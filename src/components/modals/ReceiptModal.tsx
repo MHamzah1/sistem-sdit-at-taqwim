@@ -5,6 +5,7 @@ import { Printer } from "lucide-react";
 import type { AppState } from "@/server/state";
 import { Brand } from "../Brand";
 import { Modal } from "../Modal";
+import { Button } from "../ui/button";
 import { money } from "@/src/lib/formatters";
 import { receiptNumber, terbilang } from "@/src/lib/calculations";
 
@@ -141,10 +142,12 @@ export function ReceiptModal({ payment, data, close }: ReceiptModalProps) {
           </small>
         </div>
       </div>
-      <button className="primary full no-print" onClick={() => window.print()}>
-        <Printer size={16} />
-        Cetak / Simpan PDF
-      </button>
+      <div className="pt-2 no-print">
+        <Button className="w-full h-10 gap-2 font-semibold shadow-sm" onClick={() => window.print()}>
+          <Printer className="size-4" />
+          Cetak / Simpan PDF
+        </Button>
+      </div>
     </Modal>
   );
 }

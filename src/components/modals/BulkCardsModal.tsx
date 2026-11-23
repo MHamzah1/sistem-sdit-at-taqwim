@@ -7,6 +7,8 @@ import type { AppState } from "@/server/state";
 import { Brand } from "../Brand";
 import { Badge } from "../Badge";
 import { Modal } from "../Modal";
+import { Select } from "../ui/select";
+import { Button } from "../ui/button";
 import { examParticipantNumber } from "@/src/lib/calculations";
 import { api } from "@/src/lib/api";
 
@@ -97,63 +99,30 @@ export function BulkCardsModal({
   return (
     <Modal title="Cetak Massal Kartu Ujian" close={close}>
       <div className="bulk-modal-wrapper">
-        <div className="no-print" style={{ marginBottom: 16 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr auto",
-              gap: 12,
-              alignItems: "end",
-            }}
-          >
-            <div>
-              <label
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
+        <div className="no-print space-y-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+            <div className="sm:col-span-2 space-y-1.5">
+              <label className="block text-xs font-semibold text-foreground/90">
                 Periode Ujian
               </label>
-              <select
+              <Select
                 value={selectedExamId}
                 onChange={(e) => setSelectedExamId(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                }}
               >
                 {data.exams.map((ex) => (
                   <option key={ex.id} value={ex.id}>
                     {ex.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
+            <div className="sm:col-span-2 space-y-1.5">
+              <label className="block text-xs font-semibold text-foreground/90">
                 Rombel / Kelas
               </label>
-              <select
+              <Select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                }}
               >
                 <option value="">Semua Kelas</option>
                 {data.classes.map((cls) => (
@@ -161,43 +130,45 @@ export function BulkCardsModal({
                     {cls.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
-            <button
-              className="outline"
-              disabled={busy}
-              onClick={() => void loadCards()}
-              style={{ height: 38 }}
-            >
-              {busy ? "Memproses..." : "Muat Ulang"}
-            </button>
+            <div className="sm:col-span-1">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => void loadCards()}
+                className="w-full h-9 text-xs"
+              >
+                {busy ? "Memproses..." : "Muat Ulang"}
+              </Button>
+            </div>
           </div>
 
           {error && (
-            <p className="error" style={{ marginTop: 10 }}>
-              {error}
-            </p>
+            <div className="flex items-center gap-2 p-3 text-xs rounded-lg border border-destructive/20 bg-destructive/10 text-destructive font-medium">
+              <span>{error}</span>
+            </div>
           )}
 
           {bulkResult && (
-            <div className="bulk-summary-bar" style={{ marginTop: 14 }}>
-              <div>
-                <strong>Siap Cetak: </strong>
-                <span>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-xl border border-primary/20 bg-primary/5 text-xs">
+              <div className="space-y-0.5">
+                <strong className="text-primary font-semibold block">Siap Cetak:</strong>
+                <span className="text-muted-foreground text-[11px]">
                   {bulkResult.cards.length} kartu ({pages.length} lembar A4).{" "}
                   {bulkResult.ineligibleCount > 0
                     ? `${bulkResult.ineligibleCount} siswa belum layak dilewati otomatis.`
                     : "Semua siswa terdaftar berstatus layak."}
                 </span>
               </div>
-              <button
-                className="primary"
+              <Button
                 disabled={bulkResult.cards.length === 0}
                 onClick={() => window.print()}
+                className="w-full sm:w-auto gap-2 text-xs font-semibold shadow-sm"
               >
-                <Printer size={16} />
+                <Printer className="size-4" />
                 Cetak Lembar Kartu ({bulkResult.cards.length})
-              </button>
+              </Button>
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ import type { AppState } from "@/server/state";
 import { Brand } from "../Brand";
 import { Badge } from "../Badge";
 import { Modal } from "../Modal";
+import { Button } from "../ui/button";
 import { examParticipantNumber } from "@/src/lib/calculations";
 
 export interface ExamCardData {
@@ -115,10 +116,12 @@ export function ExamCardModal({ card, data, close }: ExamCardModalProps) {
         <small>Kode verifikasi: {card.verificationCode}</small>
         <p>Validasi QR oleh petugas sekolah yang sudah masuk.</p>
       </div>
-      <button className="primary full no-print" onClick={() => window.print()}>
-        <Printer size={16} />
-        Cetak / Simpan PDF
-      </button>
+      <div className="pt-2 no-print">
+        <Button className="w-full h-10 gap-2 font-semibold shadow-sm" onClick={() => window.print()}>
+          <Printer className="size-4" />
+          Cetak / Simpan PDF
+        </Button>
+      </div>
     </Modal>
   );
 }

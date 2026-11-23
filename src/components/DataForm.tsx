@@ -2,6 +2,11 @@
 
 import React, { useState, type FormEvent } from "react";
 import { Modal } from "./Modal";
+import { Input } from "./ui/input";
+import { Select } from "./ui/select";
+import { Button } from "./ui/button";
+import { Loader2, AlertCircle } from "lucide-react";
+import { cn } from "@/src/lib/utils";
 
 export type Field = {
   key: string;
@@ -61,46 +66,78 @@ export function DataForm({
 
   return (
     <Modal title={spec.title} close={() => !busy && close()}>
-      {spec.note && <p>{spec.note}</p>}
-      <form onSubmit={submit}>
-        <fieldset disabled={busy}>
+      {spec.note && (
+        <p className="text-xs text-muted-foreground leading-relaxed -mt-1 mb-4">
+          {spec.note}
+        </p>
+      )}
+
+      <form onSubmit={submit} className="space-y-4">
+        <fieldset disabled={busy} className="space-y-4 border-0 p-0 m-0">
           {spec.fields.map((field) => {
             const value = spec.initial?.[field.key] ?? field.defaultValue;
+
+            if (field.type === "checkbox") {
+              return (
+                <label
+                  key={field.key}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border/80 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer"
+                >
+                  <input
+                    aria-label={field.label}
+                    name={field.key}
+                    type="checkbox"
+                    defaultChecked={Boolean(value)}
+                    className="size-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
+                  />
+                  <span className="text-xs font-medium text-foreground select-none">
+                    {field.label}
+                  </span>
+                </label>
+              );
+            }
+
             return (
-              <label key={field.key}>
-                {field.label}
+              <div key={field.key} className="space-y-1.5">
+                <label
+                  htmlFor={field.key}
+                  className="block text-xs font-semibold text-foreground/90"
+                >
+                  {field.label}
+                  {field.required !== false && (
+                    <span className="text-destructive ml-1">*</span>
+                  )}
+                </label>
+
                 {field.options ? (
-                  <select
+                  <Select
+                    id={field.key}
                     aria-label={field.label}
                     name={field.key}
                     required={field.required !== false}
                     defaultValue={String(value ?? "")}
                   >
-                    <option value="">Pilih...</option>
+                    <option value="">Pilih opsi...</option>
                     {field.options.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 ) : field.type === "textarea" ? (
                   <textarea
+                    id={field.key}
                     aria-label={field.label}
                     name={field.key}
                     defaultValue={String(value ?? "")}
                     required={field.required !== false}
                     maxLength={3000}
                     rows={4}
-                  />
-                ) : field.type === "checkbox" ? (
-                  <input
-                    aria-label={field.label}
-                    name={field.key}
-                    type="checkbox"
-                    defaultChecked={Boolean(value)}
+                    className="flex w-full rounded-lg border border-input bg-card px-3 py-2 text-xs text-foreground shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 resize-y"
                   />
                 ) : (
-                  <input
+                  <Input
+                    id={field.key}
                     aria-label={field.label}
                     name={field.key}
                     type={field.type || "text"}
@@ -114,17 +151,36 @@ export function DataForm({
                     }
                   />
                 )}
-              </label>
+              </div>
             );
           })}
+
           {error && (
-            <div className="notice amber" role="alert">
-              {error}
+            <div
+              className="flex items-center gap-2 p-3 text-xs rounded-lg border border-destructive/20 bg-destructive/10 text-destructive font-medium"
+              role="alert"
+            >
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
-          <button className="primary full">
-            {busy ? "Menyimpan…" : "Simpan"}
-          </button>
+
+          <div className="pt-2">
+            <Button
+              type="submit"
+              disabled={busy}
+              className="w-full h-10 text-xs font-semibold shadow-sm"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-1.5" />
+                  Menyimpan...
+                </>
+              ) : (
+                "Simpan Data"
+              )}
+            </Button>
+          </div>
         </fieldset>
       </form>
     </Modal>

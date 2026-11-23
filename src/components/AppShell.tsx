@@ -31,6 +31,7 @@ import { Toast } from "./Toast";
 import { useApp } from "@/src/lib/context/AppContext";
 import { menuGroups } from "@/src/lib/navigation";
 import { api } from "@/src/lib/api";
+import { cn } from "@/src/lib/utils";
 
 const icons: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -105,28 +106,43 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <Brand />
+    <div className="app-shell flex min-h-screen bg-background text-foreground">
+      {/* Sidebar Navigation */}
+      <aside
+        className={cn(
+          "sidebar fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-border bg-card px-3.5 transition-transform duration-200 md:translate-x-0 shadow-xs",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <Brand className="border-b border-border/60 pb-3 mb-2" />
 
-        <div className="school-space">
-          <span className="school-square">
-            <School size={17} />
+        <div className="school-space flex items-center gap-3 p-2.5 rounded-xl border border-border/80 bg-muted/40 my-2">
+          <span className="school-square flex size-8 shrink-0 items-center justify-center rounded-lg bg-card border border-border/60 text-primary shadow-2xs">
+            <School className="size-4" />
           </span>
-          <div>
-            <strong>Administrasi Sekolah</strong>
-            <small>Workspace sekolah</small>
+          <div className="flex flex-col min-w-0">
+            <strong className="text-xs font-semibold text-foreground truncate">
+              Administrasi Sekolah
+            </strong>
+            <small className="text-[10px] text-muted-foreground truncate">
+              Workspace Utama
+            </small>
           </div>
         </div>
 
-        <nav>
+        <nav className="flex-1 overflow-y-auto space-y-4 py-2 pr-1 select-none scrollbar-none">
           {isGuardian && (
             <Link
               href="/wali"
-              className={`nav-item ${pathname === "/wali" ? "active" : ""}`}
+              className={cn(
+                "nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                pathname === "/wali"
+                  ? "active bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs"
+                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+              )}
               onClick={() => setSidebarOpen(false)}
             >
-              <Users size={17} />
+              <Users className="size-4 shrink-0" />
               <span>Portal Wali Murid</span>
             </Link>
           )}
@@ -136,8 +152,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             if (visibleItems.length === 0) return null;
 
             return (
-              <div className="nav-group" key={group.label || "main"}>
-                {group.label && <div className="nav-label">{group.label}</div>}
+              <div className="nav-group space-y-1" key={group.label || "main"}>
+                {group.label && (
+                  <div className="nav-label px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1.5">
+                    {group.label}
+                  </div>
+                )}
                 {visibleItems.map((item) => {
                   const Icon = icons[item.key] || LayoutDashboard;
                   const isActive =
@@ -148,13 +168,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Link
                       key={item.key}
                       href={item.url}
-                      className={`nav-item ${isActive ? "active" : ""}`}
+                      className={cn(
+                        "nav-item flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                        isActive
+                          ? "active bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs"
+                          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                      )}
                       onClick={() => setSidebarOpen(false)}
                     >
-                      <Icon size={17} />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-2.5 truncate">
+                        <Icon className="size-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </div>
                       {item.key === "verify" && pendingVerificationCount > 0 && (
-                        <b>{pendingVerificationCount}</b>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          {pendingVerificationCount}
+                        </span>
                       )}
                     </Link>
                   );
@@ -164,72 +193,92 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="sidebar-footer">
-          <button type="button" onClick={handleLogout}>
-            <LogOut size={17} />
-            <span>Keluar</span>
+        <div className="sidebar-footer pt-3 pb-4 border-t border-border/80 space-y-2 mt-auto">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
+          >
+            <LogOut className="size-4" />
+            <span>Keluar Sesi</span>
           </button>
-          <div className="sidebar-version">
-            <span className="live-dot" />
-            Administrasi sekolah
+          <div className="sidebar-version flex items-center justify-between px-3 text-[10px] text-muted-foreground/70">
+            <span className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Sistem Aktif
+            </span>
+            <span>v1.0</span>
           </div>
         </div>
       </aside>
 
+      {/* Mobile Drawer Backdrop */}
       {sidebarOpen && (
         <div
-          className="mobile-overlay"
+          className="mobile-overlay fixed inset-0 z-40 bg-black/50 backdrop-blur-xs md:hidden"
           onClick={() => setSidebarOpen(false)}
           role="presentation"
         />
       )}
 
-      <div className="main-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
+      {/* Main Workspace Frame */}
+      <div className="main-shell flex-1 md:ml-60 flex flex-col min-w-0">
+        <header className="topbar sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-card/90 px-4 md:px-8 backdrop-blur-md">
+          {/* Breadcrumb Navigation */}
+          <div className="breadcrumb flex items-center gap-2 text-xs text-muted-foreground font-medium">
             <button
               type="button"
-              className="icon-btn mobile-menu"
+              className="icon-btn mobile-menu md:hidden p-1.5 rounded-lg text-muted-foreground hover:bg-muted"
               aria-label="Buka navigasi"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              <Menu size={21} />
+              <Menu className="size-5" />
             </button>
-            <LayoutDashboard size={16} />
-            <span>Workspace</span>
-            <ChevronRight size={13} />
-            <strong>{activeTitle}</strong>
+            <LayoutDashboard className="size-4 text-primary shrink-0 hidden sm:block" />
+            <span className="hidden sm:inline">Workspace</span>
+            <ChevronRight className="size-3.5 text-muted-foreground/60 hidden sm:block" />
+            <strong className="text-foreground font-semibold truncate max-w-[200px] sm:max-w-none">
+              {activeTitle}
+            </strong>
           </div>
 
-          <div className="topbar-actions">
+          {/* Topbar Actions */}
+          <div className="topbar-actions flex items-center gap-3">
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               aria-label="Muat ulang"
               disabled={loading || busy}
               onClick={() => void refresh()}
+              title="Perbarui Data"
             >
               <RefreshCw
-                size={17}
-                className={loading ? "animate-spin" : undefined}
+                className={cn("size-4", loading && "animate-spin text-primary")}
               />
             </button>
 
-            <span className="top-divider" />
+            <span className="top-divider h-4 w-px bg-border hidden sm:block" />
 
-            <div className="profile">
-              <span className="profile-avatar">
+            <div className="profile flex items-center gap-2.5 pl-1">
+              <span className="profile-avatar flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold shadow-2xs">
                 {actor ? actor.name.slice(0, 2).toUpperCase() : "AD"}
               </span>
-              <span>
-                <strong>{actor?.name || "Memuat..."}</strong>
-                <small>{actor?.roles.join(", ") || "Pengguna"}</small>
-              </span>
+              <div className="flex flex-col text-left leading-tight hidden sm:flex">
+                <strong className="text-xs font-semibold text-foreground truncate max-w-[130px]">
+                  {actor?.name || "Memuat..."}
+                </strong>
+                <small className="text-[10px] text-muted-foreground truncate max-w-[130px]">
+                  {actor?.roles.join(", ") || "Pengguna"}
+                </small>
+              </div>
             </div>
           </div>
         </header>
 
-        <main>{children}</main>
+        {/* Page Content Container */}
+        <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {children}
+        </main>
       </div>
 
       <Toast message={toast} />

@@ -41,6 +41,7 @@
   "exclude": [
     "node_modules",
     "contoh-project-ulul-albab",
-    "New folder (2)"
+    "New folder (2)",
+    "tamplate"
   ]
 }
