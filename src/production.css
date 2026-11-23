@@ -429,10 +429,10 @@ fieldset:disabled {
     width: 100%;
     overflow: visible;
   }
-  .app-shell:has(.print-card, .print-receipt, .bulk-cards-sheet) > .main-shell {
+  .app-shell:has(.print-card, .print-receipt, .bulk-cards-sheet, .official-exam-card) > .main-shell {
     display: none;
   }
-  .modal:has(.print-card, .print-receipt, .bulk-cards-sheet) > h2 {
+  .modal:has(.print-card, .print-receipt, .bulk-cards-sheet, .official-exam-card) > h2 {
     display: none;
   }
   .print-card,
@@ -2985,4 +2985,85 @@ fieldset:disabled {
     text-align: center;
   }
 }
+
+/* ==========================================================================
+   Kartu Peserta Ujian Resmi (Official Exam Card)
+   ========================================================================== */
+
+.official-exam-card {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid #166534;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.bulk-card-item:has(.official-exam-card) {
+  border: none !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.official-exam-card * {
+  box-sizing: border-box;
+}
+
+.exam-card-banner {
+  background: linear-gradient(135deg, #166534 0%, #14532d 100%) !important;
+  color: #ffffff !important;
+}
+
+.participant-badge-official {
+  background: #f0fdf4 !important;
+  border: 1px solid #86efac !important;
+}
+
+.exam-card-photo-box {
+  background: #f8fafc;
+  border: 1.5px solid #166534 !important;
+}
+
+.exam-card-qr-box {
+  border-radius: 6px;
+}
+
+@media print {
+  .bulk-card-item:has(.official-exam-card) {
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  .official-exam-card {
+    box-shadow: none !important;
+    border: 2px solid #166534 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .official-exam-card * {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .exam-card-banner {
+    background: #166534 !important;
+    color: #ffffff !important;
+  }
+
+  .participant-badge-official {
+    background: #f0fdf4 !important;
+    border: 1px solid #86efac !important;
+  }
+
+  .badge {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+}
+
 

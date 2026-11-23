@@ -38,6 +38,8 @@ import {
 } from "@/src/lib/calculations";
 import { Badge } from "@/src/components/Badge";
 import { CopyButton } from "@/src/components/CopyButton";
+import { Button } from "@/src/components/ui/button";
+import { ExamCardView } from "@/src/components/cards";
 
 type Student = AppState["students"][number];
 type ClassItem = AppState["classes"][number];
@@ -921,133 +923,35 @@ export function StudentDetailView({
                       </div>
                     </div>
 
-                    <div className="st-exam-card-col">
-                      <div className="st-exam-card">
-                        <div className="st-exam-card__header">
-                          <div style={{ textAlign: "center", width: "100%" }}>
-                            <h4
-                              style={{
-                                margin: 0,
-                                fontSize: 13,
-                                color: "#16613e",
-                              }}
-                            >
-                              SDIT AT-TAQWIM BEKASI
-                            </h4>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--ink)",
-                              }}
-                            >
-                              KARTU PESERTA UJIAN RESMI
-                            </span>
-                            <small
-                              style={{
-                                display: "block",
-                                color: "var(--muted)",
-                                fontSize: 9,
-                              }}
-                            >
-                              {activeExam ? activeExam.name : "Penilaian Semester"}{" "}
-                              · TA {studentYear?.name || "2026/2027"}
-                            </small>
-                          </div>
-                        </div>
-
-                        <div className="st-exam-card__body">
-                          <div className="st-exam-card__left">
-                            <div className="st-card-photo-box">
-                              {student.photoUrl ? (
-                                <img
-                                  src={student.photoUrl}
-                                  alt={student.name}
-                                  style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  }}
-                                />
-                              ) : (
-                                <span>3x4 Foto</span>
-                              )}
-                            </div>
-                            {qrCodeUrl && (
-                              <div className="st-card-qr-box">
-                                <img src={qrCodeUrl} alt="QR Code Verifikasi" />
-                                <small>Pindai untuk validasi</small>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="st-exam-card__right">
-                            <table className="st-mini-table">
-                              <tbody>
-                                <tr>
-                                  <td>Nama Siswa</td>
-                                  <td>:</td>
-                                  <td>
-                                    <strong>{student.name}</strong>
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td>No. Peserta</td>
-                                  <td>:</td>
-                                  <td>
-                                    <span className="participant-badge">
-                                      {participantNum}
-                                    </span>
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td>NIS / NISN</td>
-                                  <td>:</td>
-                                  <td>
-                                    {student.nis} / {student.nisn || "—"}
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td>Kelas</td>
-                                  <td>:</td>
-                                  <td>
-                                    {studentClass ? studentClass.name : "—"}
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td>Tempat / Tgl Lahir</td>
-                                  <td>:</td>
-                                  <td>
-                                    {student.birthPlace || "Bekasi"},{" "}
-                                    {formatDateIndo(student.birthDate)}
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td>Status Kelayakan</td>
-                                  <td>:</td>
-                                  <td>
-                                    <Badge
-                                      status={
-                                        examEligibility?.status || "NOT_EVALUATED"
-                                      }
-                                    />
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        <div className="st-exam-card__footer">
-                          <button
-                            type="button"
-                            className="primary tiny"
-                            onClick={() => onPrintCard(student)}
-                          >
-                            <Printer size={13} />
-                            Cetak Kartu Ujian Siswa
-                          </button>
-                        </div>
+                    <div className="st-exam-card-col max-w-[560px]">
+                      <ExamCardView
+                        student={{
+                          id: student.id,
+                          name: student.name,
+                          nis: student.nis,
+                          nisn: student.nisn,
+                          photoUrl: student.photoUrl,
+                          classId: student.classId,
+                        }}
+                        classNameStr={studentClass ? studentClass.name : "—"}
+                        participantNumber={participantNum}
+                        examName={activeExam ? activeExam.name : "Penilaian Semester"}
+                        academicYearName={studentYear?.name || "TA 2026/2027"}
+                        startDate={activeExam?.startDate || ""}
+                        endDate={activeExam?.endDate || ""}
+                        status={examEligibility?.status || "NOT_EVALUATED"}
+                        qrCodeUrl={qrCodeUrl}
+                        compact={true}
+                      />
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          size="sm"
+                          className="gap-2 text-xs font-semibold shadow-xs"
+                          onClick={() => onPrintCard(student)}
+                        >
+                          <Printer className="size-3.5" />
+                          Buka & Cetak Kartu Peserta Ujian
+                        </Button>
                       </div>
                     </div>
                   </div>

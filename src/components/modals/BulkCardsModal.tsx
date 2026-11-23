@@ -4,13 +4,12 @@ import React, { useState, useEffect, Fragment } from "react";
 import QRCode from "qrcode";
 import { Printer } from "lucide-react";
 import type { AppState } from "@/server/state";
-import { Brand } from "../Brand";
-import { Badge } from "../Badge";
 import { Modal } from "../Modal";
 import { Select } from "../ui/select";
 import { Button } from "../ui/button";
 import { examParticipantNumber } from "@/src/lib/calculations";
 import { api } from "@/src/lib/api";
+import { ExamCardView } from "../cards";
 
 interface BulkCardsModalProps {
   data: AppState;
@@ -202,69 +201,26 @@ export function BulkCardsModal({
 
                   return (
                     <Fragment key={c.id}>
-                      <div className="bulk-card-item">
-                        <Brand />
-                        <div className="card-heading">
-                          <h2>KARTU PESERTA UJIAN</h2>
-                          <p>
-                            {examObj?.name} · {academicYear?.name}
-                          </p>
-                        </div>
-                        <div className="exam-card-body">
-                          <div>
-                            <div className="participant-badge">
-                              <strong>No. Peserta: </strong>
-                              <span className="participant-number">
-                                {partNumber}
-                              </span>
-                            </div>
-                            <h3>{student?.name}</h3>
-                            <p>
-                              NIS: {student?.nis} · NISN: {student?.nisn || "—"}
-                            </p>
-                            <p>Kelas: {classItem?.name}</p>
-                            {eligibility && (
-                              <Badge status={eligibility.status} />
-                            )}
-                          </div>
-                          <div className="exam-card-media">
-                            {student?.photoUrl ? (
-                              <div className="student-photo-frame">
-                                <img
-                                  src={student.photoUrl}
-                                  alt="Pas foto siswa"
-                                  className="student-card-photo"
-                                  onError={(e) => {
-                                    (e.currentTarget as HTMLElement).style.display =
-                                      "none";
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="student-photo-placeholder">
-                                <span>
-                                  Pas Foto
-                                  <br />3 x 4
-                                </span>
-                              </div>
-                            )}
-                            {qrCodes[c.id] && (
-                              <img
-                                src={qrCodes[c.id]}
-                                alt={`QR ${student?.name}`}
-                                width={120}
-                                height={120}
-                              />
-                            )}
-                          </div>
-                        </div>
-                        <p>
-                          Pelaksanaan: {examObj?.startDate} – {examObj?.endDate}
-                        </p>
-                        <small>Kode verifikasi: {c.verificationCode}</small>
-                        <p style={{ fontSize: 11, color: "#64748b" }}>
-                          Validasi QR oleh petugas sekolah yang sudah masuk.
-                        </p>
+                      <div className="bulk-card-item p-0 border-0 bg-transparent shadow-none">
+                        <ExamCardView
+                          student={{
+                            id: student?.id || c.studentId,
+                            name: student?.name || "Siswa",
+                            nis: student?.nis || "—",
+                            nisn: student?.nisn,
+                            photoUrl: student?.photoUrl,
+                            classId: student?.classId,
+                          }}
+                          classNameStr={classItem?.name || "—"}
+                          participantNumber={partNumber}
+                          examName={examObj?.name || "Ujian"}
+                          academicYearName={academicYear?.name || "—"}
+                          startDate={examObj?.startDate || ""}
+                          endDate={examObj?.endDate || ""}
+                          status={eligibility?.status || "ELIGIBLE"}
+                          qrCodeUrl={qrCodes[c.id]}
+                          compact={true}
+                        />
                       </div>
                       {idx === 0 && page.length === 2 && (
                         <div className="bulk-cut-line">

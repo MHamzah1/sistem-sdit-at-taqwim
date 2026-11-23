@@ -4,11 +4,10 @@ import React, { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { Printer } from "lucide-react";
 import type { AppState } from "@/server/state";
-import { Brand } from "../Brand";
-import { Badge } from "../Badge";
 import { Modal } from "../Modal";
 import { Button } from "../ui/button";
 import { examParticipantNumber } from "@/src/lib/calculations";
+import { ExamCardView } from "../cards";
 
 export interface ExamCardData {
   eligibility: AppState["eligibilities"][number];
@@ -30,7 +29,7 @@ export function ExamCardModal({ card, data, close }: ExamCardModalProps) {
     if (card && typeof window !== "undefined") {
       void QRCode.toDataURL(
         `${window.location.origin}/ujian/kartu?code=${card.verificationCode}`,
-        { width: 160 },
+        { width: 160, margin: 1 },
       ).then(setQr);
     } else {
       setQr("");
@@ -59,65 +58,31 @@ export function ExamCardModal({ card, data, close }: ExamCardModalProps) {
 
   return (
     <Modal title="Kartu peserta ujian" close={close}>
-      <div className="print-card">
-        <Brand />
-        <div className="card-heading">
-          <h2>KARTU PESERTA UJIAN</h2>
-          <p>
-            {card.exam.name} · {yearName}
-          </p>
-        </div>
-        <div className="exam-card-body">
-          <div>
-            <div className="participant-badge">
-              <strong>No. Peserta: </strong>
-              <span className="participant-number">{partNumber}</span>
-            </div>
-            <h3>{studentName}</h3>
-            <p>
-              NIS: {cardStudent?.nis} · NISN: {cardStudent?.nisn || "—"}
-            </p>
-            <p>Kelas: {className}</p>
-            <Badge status={card.eligibility.status} />
-          </div>
-          <div className="exam-card-media">
-            {cardStudent?.photoUrl ? (
-              <div className="student-photo-frame">
-                <img
-                  src={cardStudent.photoUrl}
-                  alt="Pas foto siswa"
-                  className="student-card-photo"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLElement).style.display = "none";
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="student-photo-placeholder">
-                <span>
-                  Pas Foto
-                  <br />3 x 4
-                </span>
-              </div>
-            )}
-            {qr && (
-              <img
-                src={qr}
-                alt="QR validasi kartu ujian"
-                width={120}
-                height={120}
-              />
-            )}
-          </div>
-        </div>
-        <p>
-          Pelaksanaan: {card.exam.startDate} – {card.exam.endDate}
-        </p>
-        <small>Kode verifikasi: {card.verificationCode}</small>
-        <p>Validasi QR oleh petugas sekolah yang sudah masuk.</p>
+      <div className="print-card max-w-[560px] mx-auto">
+        <ExamCardView
+          student={{
+            id: cardStudent?.id || card.studentId,
+            name: studentName,
+            nis: cardStudent?.nis || "—",
+            nisn: cardStudent?.nisn,
+            photoUrl: cardStudent?.photoUrl,
+            classId: cardStudent?.classId,
+          }}
+          classNameStr={className}
+          participantNumber={partNumber}
+          examName={card.exam.name}
+          academicYearName={yearName}
+          startDate={card.exam.startDate}
+          endDate={card.exam.endDate}
+          status={card.eligibility.status}
+          qrCodeUrl={qr}
+        />
       </div>
-      <div className="pt-2 no-print">
-        <Button className="w-full h-10 gap-2 font-semibold shadow-sm" onClick={() => window.print()}>
+      <div className="pt-3 no-print max-w-[560px] mx-auto">
+        <Button
+          className="w-full h-10 gap-2 font-semibold shadow-sm"
+          onClick={() => window.print()}
+        >
           <Printer className="size-4" />
           Cetak / Simpan PDF
         </Button>
