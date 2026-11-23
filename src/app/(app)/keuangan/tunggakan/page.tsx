@@ -30,19 +30,8 @@ export default function TunggakanPage() {
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
   const [paymentStudentId, setPaymentStudentId] = useState<string | null>(null);
 
-  if (loading || !state) {
-    return (
-      <div className="st-page-shell">
-        <div className="st-table-loading">
-          <div className="st-spinner" />
-          <p>Memuat rekapitulasi tunggakan SPP...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const students = state.students;
-  const classes = state.classes;
+  const students = state?.students ?? [];
+  const classes = state?.classes ?? [];
 
   // Filter students who have unpaid balance
   const arrearsStudents = useMemo(() => {
@@ -65,6 +54,17 @@ export default function TunggakanPage() {
     (sum, s) => sum + balance(s.id),
     0,
   );
+
+  if (loading || !state) {
+    return (
+      <div className="st-page-shell">
+        <div className="st-table-loading">
+          <div className="st-spinner" />
+          <p>Memuat rekapitulasi tunggakan SPP...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="st-page-shell">

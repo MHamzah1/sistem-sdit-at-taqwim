@@ -33,21 +33,10 @@ export default function KelayakanUjianPage() {
   const [examCard, setExamCard] = useState<ExamCardData | null>(null);
   const [dispensationForm, setDispensationForm] = useState<FormSpec | null>(null);
 
-  if (loading || !state) {
-    return (
-      <div className="st-page-shell">
-        <div className="st-table-loading">
-          <div className="st-spinner" />
-          <p>Memuat data kelayakan ujian...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const exams = state.exams;
-  const classes = state.classes;
-  const students = state.students;
-  const eligibilities = state.eligibilities;
+  const exams = state?.exams ?? [];
+  const classes = state?.classes ?? [];
+  const students = state?.students ?? [];
+  const eligibilities = state?.eligibilities ?? [];
 
   const currentExam =
     exams.find((e) => e.id === selectedExamId) || exams[0];
@@ -81,6 +70,17 @@ export default function KelayakanUjianPage() {
       return true;
     });
   }, [examRoster, selectedClassId, eligibilities, currentExam, statusFilter, search]);
+
+  if (loading || !state) {
+    return (
+      <div className="st-page-shell">
+        <div className="st-table-loading">
+          <div className="st-spinner" />
+          <p>Memuat data kelayakan ujian...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleEvaluate = async (student: Student) => {
     if (!currentExam) return;

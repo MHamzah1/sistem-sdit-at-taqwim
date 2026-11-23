@@ -20,22 +20,11 @@ export default function LaporanSppPage() {
   const [selectedClassId, setSelectedClassId] = useState("ALL");
   const [search, setSearch] = useState("");
 
-  if (loading || !state) {
-    return (
-      <div className="st-page-shell">
-        <div className="st-table-loading">
-          <div className="st-spinner" />
-          <p>Memuat laporan rekapitulasi...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const students = state.students;
-  const classes = state.classes;
-  const academicYears = state.academicYears;
-  const exams = state.exams;
-  const eligibilities = state.eligibilities;
+  const students = state?.students ?? [];
+  const classes = state?.classes ?? [];
+  const academicYears = state?.academicYears ?? [];
+  const exams = state?.exams ?? [];
+  const eligibilities = state?.eligibilities ?? [];
 
   const currentYear =
     academicYears.find((y) => y.id === selectedYearId) ||
@@ -60,6 +49,17 @@ export default function LaporanSppPage() {
       return true;
     });
   }, [students, classes, currentYear, selectedClassId, search]);
+
+  if (loading || !state) {
+    return (
+      <div className="st-page-shell">
+        <div className="st-table-loading">
+          <div className="st-spinner" />
+          <p>Memuat laporan rekapitulasi...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleExportCsv = () => {
     const headers = [
