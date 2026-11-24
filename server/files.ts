@@ -8,6 +8,8 @@ import {
   allow,
   audit,
   authenticate,
+  canManageDocuments,
+  canReviewDocuments,
   csrf,
   HttpError,
   isGuardian,
@@ -228,7 +230,13 @@ export async function downloadStudentDocument(
     )[0],
     "Dokumen tidak ditemukan",
   );
-  await ownStudent(db, ctx.actor, doc.studentId);
+  if (isGuardian(ctx.actor)) {
+    await ownStudent(db, ctx.actor, doc.studentId);
+  } else {
+    if (!canManageDocuments(ctx.actor) && !canReviewDocuments(ctx.actor)) {
+      throw new HttpError(403, "Akses unduh dokumen ditolak", "FORBIDDEN");
+    }
+  }
 
   const file = requireValue(
     await get(doc.storagePath, { access: "private", useCache: false }),

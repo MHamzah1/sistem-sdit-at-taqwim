@@ -13,6 +13,7 @@ export class HttpError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -75,6 +76,23 @@ export function isGuardian(actor: Actor) {
     actor.permissions.includes("guardian")
   );
 }
+export function isSchemaNotReady(err: unknown): boolean {
+  if (!err) return false;
+  const anyErr = err as Record<string, unknown>;
+  const code = anyErr.code || (anyErr.cause as Record<string, unknown> | undefined)?.code;
+  if (code === "42P01" || code === "42703") return true;
+  const msg = typeof anyErr.message === "string" ? anyErr.message : "";
+  if (
+    msg.includes("42P01") ||
+    msg.includes("42703") ||
+    (msg.includes("relation") && msg.includes("does not exist")) ||
+    (msg.includes("column") && msg.includes("does not exist"))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 const SENSITIVE_AUDIT_KEYS = new Set([
   "password",
   "passwordhash",
@@ -86,7 +104,9 @@ const SENSITIVE_AUDIT_KEYS = new Set([
   "familycardnumber",
   "birthcertificatenumber",
   "phone",
+  "phonenumber",
   "email",
+  "monthlyincome",
   "monthlyincomerange",
   "medicalhistory",
   "foodallergies",
@@ -95,6 +115,13 @@ const SENSITIVE_AUDIT_KEYS = new Set([
   "emergencyhandlingnotes",
   "assistanceneeds",
   "specialneedstypes",
+  "storagepath",
+  "filedata",
+  "blob",
+  "idempotencykey",
+  "receipttoken",
+  "patch",
+  "rawpatch",
 ]);
 
 export function sanitizeForAudit(data: unknown): unknown {
@@ -120,6 +147,26 @@ export function sanitizeForAudit(data: unknown): unknown {
 
 export function canAccessSensitiveStudentData(actor: Actor): boolean {
   return actor.permissions.includes("master");
+}
+
+export function canReadSensitiveIdentity(actor: Actor): boolean {
+  return actor.permissions.includes("master");
+}
+
+export function canReadHealthMedical(actor: Actor): boolean {
+  return actor.permissions.includes("master");
+}
+
+export function canReadAidIncome(actor: Actor): boolean {
+  return actor.permissions.includes("master") || actor.permissions.includes("finance");
+}
+
+export function canManageDocuments(actor: Actor): boolean {
+  return actor.permissions.includes("master");
+}
+
+export function canReviewDocuments(actor: Actor): boolean {
+  return actor.permissions.includes("master") || actor.permissions.includes("principal");
 }
 
 export async function audit(

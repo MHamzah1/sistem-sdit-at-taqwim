@@ -232,11 +232,12 @@ export function StudentDetailView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          measurementDate: measurementForm.date,
           measuredAt: measurementForm.date,
           heightCm: Number(measurementForm.heightCm),
           weightKg: Number(measurementForm.weightKg),
           headCircumferenceCm: measurementForm.headCircumferenceCm ? Number(measurementForm.headCircumferenceCm) : null,
-          semester: measurementForm.semester,
+          semester: Number(measurementForm.semester) || 1,
           notes: measurementForm.notes,
         }),
       });
@@ -262,7 +263,10 @@ export function StudentDetailView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           aidType: aidForm.aidType,
+          aidSource: aidForm.programName || aidForm.aidType,
           programName: aidForm.programName || aidForm.aidType,
+          startDate: aidForm.year ? `${aidForm.year}-01-01` : null,
+          endDate: aidForm.year ? `${aidForm.year}-12-31` : null,
           year: Number(aidForm.year),
           amount: aidForm.amount ? Number(aidForm.amount) : null,
           status: aidForm.status,
@@ -1699,7 +1703,7 @@ export function StudentDetailView({
                           {measurements.map((m: any) => (
                             <tr key={m.id}>
                               <td>
-                                <strong>{formatDateIndo(m.measuredAt)}</strong>
+                                <strong>{formatDateIndo(m.measuredAt || m.measurementDate)}</strong>
                               </td>
                               <td>
                                 <span className="st-pill-green">
@@ -1766,8 +1770,8 @@ export function StudentDetailView({
                               <td>
                                 <strong>{a.aidType}</strong>
                               </td>
-                              <td>{a.programName || a.aidType}</td>
-                              <td>{a.year}</td>
+                              <td>{a.programName || a.aidSource || a.aidType}</td>
+                              <td>{a.year || (a.startDate ? a.startDate.slice(0, 4) : "—")}</td>
                               <td>{a.amount ? money(a.amount) : "—"}</td>
                               <td>
                                 <span

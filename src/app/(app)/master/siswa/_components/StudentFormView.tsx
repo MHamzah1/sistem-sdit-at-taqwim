@@ -45,6 +45,8 @@ import { Select } from "@/src/components/ui/select";
 import { Textarea } from "@/src/components/ui/textarea";
 import { Badge as UiBadge } from "@/src/components/ui/badge";
 import { cn } from "@/src/lib/utils";
+import { upload } from "@vercel/blob/client";
+import { useApp } from "@/src/lib/context/AppContext";
 import { api, uploadStudentDocument, downloadStudentDocumentContent } from "@/src/lib/api";
 
 interface FormFieldProps {
@@ -107,6 +109,9 @@ export function StudentFormView({
   onCancel,
   onSaveDraft,
 }: StudentFormViewProps) {
+  const { state } = useApp();
+  const currentUserId = state?.actor?.id;
+
   const todayStr = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Jakarta",
   });
@@ -168,7 +173,13 @@ export function StudentFormView({
   const [idRegency, setIdRegency] = useState(idAddr?.regency || "Kab. Bogor");
   const [idProvince, setIdProvince] = useState(idAddr?.province || "Jawa Barat");
   const [idPostalCode, setIdPostalCode] = useState(idAddr?.postalCode || "");
-  const [sameAsIdentity, setSameAsIdentity] = useState(true);
+  const [sameAsIdentity, setSameAsIdentity] = useState(
+    domAddr
+      ? domAddr.address === idAddr?.address &&
+        domAddr.village === idAddr?.village &&
+        domAddr.district === idAddr?.district
+      : true,
+  );
 
   const [domAddress, setDomAddress] = useState(domAddr?.address || "");
   const [domRt, setDomRt] = useState(domAddr?.rt || "");
@@ -228,41 +239,112 @@ export function StudentFormView({
   const [academicNotes, setAcademicNotes] = useState(initialEnrollment?.notes || "");
 
   // --- Section 04 & 05: Data Ayah & Ibu ---
-  const fatherData = initialFullProfile?.family?.find((f: any) => f.relationshipType === "FATHER")?.member;
-  const motherData = initialFullProfile?.family?.find((f: any) => f.relationshipType === "MOTHER")?.member;
+  const fatherRel = initialFullProfile?.family?.find(
+    (f: any) => f.relationshipType === "FATHER",
+  );
+  const motherRel = initialFullProfile?.family?.find(
+    (f: any) => f.relationshipType === "MOTHER",
+  );
+  const guardianRel = initialFullProfile?.family?.find(
+    (f: any) =>
+      f.relationshipType !== "FATHER" && f.relationshipType !== "MOTHER",
+  );
+  const emergencyRel = initialFullProfile?.family?.find(
+    (f: any) => f.isEmergencyContact,
+  );
+
+  const fatherData = fatherRel?.member;
+  const motherData = motherRel?.member;
 
   // Ayah state
-  const [fatherMode, setFatherMode] = useState<"new" | "existing">("new");
-  const [fatherId, setFatherId] = useState<string | null>(fatherData?.id || null);
+  const [fatherMode, setFatherMode] = useState<"new" | "existing">(
+    fatherData?.id ? "existing" : "new",
+  );
+  const [fatherId, setFatherId] = useState<string | null>(
+    fatherData?.id || null,
+  );
   const [fatherName, setFatherName] = useState(fatherData?.fullName || "");
   const [fatherNik, setFatherNik] = useState(fatherData?.nik || "");
-  const [fatherLifeStatus, setFatherLifeStatus] = useState(fatherData?.lifeStatus || "ALIVE");
-  const [fatherEducation, setFatherEducation] = useState(fatherData?.education || "S1");
-  const [fatherOccupation, setFatherOccupation] = useState(fatherData?.occupation || "KARYAWAN_SWASTA");
-  const [fatherInstitution, setFatherInstitution] = useState(fatherData?.institutionName || "");
-  const [fatherIncome, setFatherIncome] = useState(fatherData?.monthlyIncomeRange || "RP_2_JT_SD_5_JT");
+  const [fatherLifeStatus, setFatherLifeStatus] = useState(
+    fatherData?.lifeStatus || "ALIVE",
+  );
+  const [fatherEducation, setFatherEducation] = useState(
+    fatherData?.education || "S1",
+  );
+  const [fatherOccupation, setFatherOccupation] = useState(
+    fatherData?.occupation || "KARYAWAN_SWASTA",
+  );
+  const [fatherInstitution, setFatherInstitution] = useState(
+    fatherData?.institutionName || "",
+  );
+  const [fatherIncome, setFatherIncome] = useState(
+    fatherData?.monthlyIncomeRange || "RP_2_JT_SD_5_JT",
+  );
   const [fatherPhone, setFatherPhone] = useState(fatherData?.phone || "");
   const [fatherEmail, setFatherEmail] = useState(fatherData?.email || "");
 
   // Ibu state
-  const [motherMode, setMotherMode] = useState<"new" | "existing">("new");
-  const [motherId, setMotherId] = useState<string | null>(motherData?.id || null);
+  const [motherMode, setMotherMode] = useState<"new" | "existing">(
+    motherData?.id ? "existing" : "new",
+  );
+  const [motherId, setMotherId] = useState<string | null>(
+    motherData?.id || null,
+  );
   const [motherName, setMotherName] = useState(motherData?.fullName || "");
   const [motherNik, setMotherNik] = useState(motherData?.nik || "");
-  const [motherLifeStatus, setMotherLifeStatus] = useState(motherData?.lifeStatus || "ALIVE");
-  const [motherEducation, setMotherEducation] = useState(motherData?.education || "D3");
-  const [motherOccupation, setMotherOccupation] = useState(motherData?.occupation || "IBU_RUMAH_TANGGA");
-  const [motherInstitution, setMotherInstitution] = useState(motherData?.institutionName || "");
-  const [motherIncome, setMotherIncome] = useState(motherData?.monthlyIncomeRange || "TIDAK_BERPENGHASILAN");
+  const [motherLifeStatus, setMotherLifeStatus] = useState(
+    motherData?.lifeStatus || "ALIVE",
+  );
+  const [motherEducation, setMotherEducation] = useState(
+    motherData?.education || "D3",
+  );
+  const [motherOccupation, setMotherOccupation] = useState(
+    motherData?.occupation || "IBU_RUMAH_TANGGA",
+  );
+  const [motherInstitution, setMotherInstitution] = useState(
+    motherData?.institutionName || "",
+  );
+  const [motherIncome, setMotherIncome] = useState(
+    motherData?.monthlyIncomeRange || "TIDAK_BERPENGHASILAN",
+  );
   const [motherPhone, setMotherPhone] = useState(motherData?.phone || "");
   const [motherEmail, setMotherEmail] = useState(motherData?.email || "");
 
   // --- Section 06: Wali & Kontak Darurat ---
-  const [primaryContact, setPrimaryContact] = useState<"FATHER" | "MOTHER" | "GUARDIAN">("FATHER");
-  const [paymentResponsible, setPaymentResponsible] = useState<"FATHER" | "MOTHER" | "GUARDIAN">("FATHER");
-  const [emergencyName, setEmergencyName] = useState(fatherData?.fullName || "");
-  const [emergencyRelationship, setEmergencyRelationship] = useState("AYAH_KANDUNG");
-  const [emergencyPhone, setEmergencyPhone] = useState(fatherData?.phone || "");
+  const initialPrimary = fatherRel?.isPrimaryContact
+    ? "FATHER"
+    : motherRel?.isPrimaryContact
+      ? "MOTHER"
+      : guardianRel?.isPrimaryContact
+        ? "GUARDIAN"
+        : "FATHER";
+  const initialPayment = fatherRel?.isPaymentResponsible
+    ? "FATHER"
+    : motherRel?.isPaymentResponsible
+      ? "MOTHER"
+      : guardianRel?.isPaymentResponsible
+        ? "GUARDIAN"
+        : "FATHER";
+
+  const [primaryContact, setPrimaryContact] = useState<
+    "FATHER" | "MOTHER" | "GUARDIAN"
+  >(initialPrimary);
+  const [paymentResponsible, setPaymentResponsible] = useState<
+    "FATHER" | "MOTHER" | "GUARDIAN"
+  >(initialPayment);
+  const [emergencyName, setEmergencyName] = useState(
+    emergencyRel?.member?.fullName || "",
+  );
+  const [emergencyRelationship, setEmergencyRelationship] = useState(
+    emergencyRel?.relationshipType === "FATHER"
+      ? "AYAH_KANDUNG"
+      : emergencyRel?.relationshipType === "MOTHER"
+        ? "IBU_KANDUNG"
+        : emergencyRel?.relationshipType || "AYAH_KANDUNG",
+  );
+  const [emergencyPhone, setEmergencyPhone] = useState(
+    emergencyRel?.member?.phone || "",
+  );
 
   // --- Section 07: Kesehatan ---
   const healthData = initialFullProfile?.health;
@@ -314,18 +396,20 @@ export function StudentFormView({
   const [photoError, setPhotoError] = useState("");
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
 
-  // Sync Emergency Contact when Primary Changes
+  // Sync Emergency Contact when Primary Changes only if emergency contact has not been set
+  const hasInitializedEmergency = useRef(Boolean(emergencyRel?.member?.fullName));
   useEffect(() => {
-    if (primaryContact === "FATHER" && fatherName) {
+    if (hasInitializedEmergency.current) return;
+    if (primaryContact === "FATHER" && fatherName && !emergencyName) {
       setEmergencyName(fatherName);
       setEmergencyRelationship("AYAH_KANDUNG");
       setEmergencyPhone(fatherPhone);
-    } else if (primaryContact === "MOTHER" && motherName) {
+    } else if (primaryContact === "MOTHER" && motherName && !emergencyName) {
       setEmergencyName(motherName);
       setEmergencyRelationship("IBU_KANDUNG");
       setEmergencyPhone(motherPhone);
     }
-  }, [primaryContact, fatherName, fatherPhone, motherName, motherPhone]);
+  }, [primaryContact, fatherName, fatherPhone, motherName, motherPhone, emergencyName]);
 
   // Handle Photo File selection and compression
   const handlePhotoSelect = (file: File) => {
@@ -2436,16 +2520,35 @@ export function StudentFormView({
                     return;
                   }
                   try {
+                    const userId = currentUserId || "system";
+                    const extensions: Record<string, string> = {
+                      "image/jpeg": "jpg",
+                      "image/png": "png",
+                      "application/pdf": "pdf",
+                      "image/webp": "webp",
+                    };
+                    const ext = extensions[uploadDocFile.type];
+                    if (!ext) throw new Error("Pilih berkas JPG, PNG, PDF, atau WebP maksimal 5 MB");
+
                     if (student?.id) {
                       const createdDoc = await uploadStudentDocument(
                         uploadDocFile,
-                        student.id,
+                        userId,
                         student.id,
                         uploadDocType,
                         uploadDocName,
                       );
                       setDocuments((prev) => [...prev, createdDoc]);
                     } else {
+                      const blob = await upload(
+                        `student-documents/${userId}/${crypto.randomUUID()}.${ext}`,
+                        uploadDocFile,
+                        {
+                          access: "private",
+                          handleUploadUrl: "/api/files/upload",
+                          contentType: uploadDocFile.type,
+                        },
+                      );
                       const newDoc = {
                         documentType: uploadDocType,
                         documentName: uploadDocName,
@@ -2453,7 +2556,7 @@ export function StudentFormView({
                         mimeType: uploadDocFile.type,
                         fileSize: uploadDocFile.size,
                         verificationStatus: "PENDING",
-                        storagePath: `staging/${uploadDocFile.name}`,
+                        storagePath: blob.pathname,
                       };
                       setDocuments((prev) => [...prev, newDoc]);
                     }

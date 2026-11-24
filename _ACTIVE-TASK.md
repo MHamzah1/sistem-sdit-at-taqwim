@@ -1,22 +1,23 @@
-# Active Task: TGS-010 s/d TGS-021 (Finishing FIN-001 s/d FIN-012) — Master Siswa SDIT AT-TAQWIM
+# Active Task: FIX-001 s/d FIX-009 — Master Siswa SDIT AT-TAQWIM (V3 UI FREEZE)
 
-- **Fitur:** Kelengkapan Master Siswa SDIT AT-TAQWIM (Finishing V2 & UI Freeze)
-- **Status:** SELESAI PADA SOURCE (Verifikasi Statis & Unit Test Lulus; Runtime DB Pending Gerbang DAT-001)
-- **Baseline Audit:** Commit `e3b88d4` (14:53 WIB)
-- **Cakupan Pemulihan & Perbaikan (FIN-001 s/d FIN-012):**
-  - FIN-001 / TGS-011: Keamanan, RBAC Whitelist Projection, Masking NIK/KK/HP, Sanitizer Audit Log Rekursif.
-  - FIN-002 / TGS-010: Pemulihan 10 Kolom Skema `students`, Unique Constraints NIK/NISN, Unique Address Type, FK Dokumen Bantuan.
-  - FIN-003 / TGS-012: Transaksi Atomik Create & Update 10 Section, Pemisahan Kontak Darurat, Guard Tagihan SPP 409.
-  - FIN-004 / TGS-013: Upload Berkas Private Blob Asli (Vercel Blob), Validasi 5 MB Server-Side, Streaming Byte Penuh > 2 MB.
-  - FIN-005 / TGS-014: Import XLSX Nyata (`/api/students/import/preview` & `commit`), Eliminasi Simulasi `setTimeout`.
-  - FIN-006 / TGS-015: Penyelarasan Kontrak API, Payload Review Usulan `{ approved, rejectionReason }`, Error 503 `SCHEMA_NOT_READY`.
-  - FIN-007 / TGS-016: Resume Draft via Query Param `?draftId=...`, Update via PATCH, Guard Tolak Finalisasi Draft Ganda.
-  - FIN-008 / TGS-017: Authoritative 10-Section Completeness Scoring, Penyesuaian Skor Realistis Siswa Legacy (~20%).
-  - FIN-009 / TGS-018: Integrasi Status Karakteristik Santri, Penandaan Section 09 INCOMPLETE jika Status EMPTY.
-  - FIN-010 / TGS-019: Entry Point Portal Wali Murid di Dashboard untuk Usulan Pembaruan Biodata & Antrean Review TU.
-  - FIN-011 / TGS-020: Integrasi Frontend Penuh dengan Kepatuhan Mutlak **MANDATORY UI FREEZE** (0 Perombakan Visual).
-  - FIN-012 / TGS-021: Test Suite Unit Test (14/14 Lulus), Typecheck (0 Error), Pemetaan Lengkap TC-01 s/d TC-80.
+- **Fitur:** Kelengkapan Master Siswa SDIT AT-TAQWIM (V3 Focused Error Fix & Mandatory UI Freeze)
+- **Status:** SELESAI PADA SOURCE (Typecheck 0 error, Unit Tests 19/19 Lulus; Runtime DB Pending Gerbang DAT-001)
+- **Baseline Audit:** Commit `301bbccfc5b008afbf41eb4d7c0a9d4e3288d0f9`
+- **Cakupan Perbaikan (FIX-001 s/d FIX-009):**
+  - **FIX-001 (P0):** Persistensi Dokumen & Foto Siswa — Private Blob asli terikat sesi aktor (`state?.actor?.id`), eliminasi path fiktif `staging/...`, blokir data/blob URL pada `photoUrl`, validasi path prefix `student-documents/${actor.id}/` di backend, proteksi RBAC download berkas siswa.
+  - **FIX-002 (P0):** Persistensi Atomik & Pencegahan Duplikasi — Idempotensi pengukuran fisik & bantuan pendidikan, penanganan kontak darurat non-orang tua tersimpan independen, guard pembatalan mutasi kelas siswa ber-invoice aktif (HTTP 409 `CLASS_MUTATION_RESTRICTED`).
+  - **FIX-003 (P0):** Prefill, Round-Trip & UI Freeze — Inisialisasi `sameAsIdentity` dari perbedaan alamat aktual, inisialisasi `fatherMode`/`motherMode` `"existing"` jika ada ID, inisialisasi kontak utama & penanggung jawab SPP dari database, eliminasi penimpaan kontak darurat mandiri oleh `useEffect` saat mount. Kepatuhan UI Freeze 100%.
+  - **FIX-004 (P0):** Schema Readiness & Error Handling — Penyelarasan penanganan error database PostgreSQL `42P01` & `42703` dengan response machine-readable HTTP 503 `{ error, code: "SCHEMA_NOT_READY" }`. Proyeksi kompatibilitas legacy `/api/state` tetap terjaga tanpa pemalsuan data di profil lengkap.
+  - **FIX-005 (P0):** Import & Export XLSX Nyata — Pinned dependensi `xlsx@0.18.5`, parser XLSX asli menjaga leading zero pada NIK/NIS/NISN/KK/HP, sanitasi formula injection pada export, template XLSX biner asli (`/api/students/import/template`), verifikasi token preview ditandatangani HMAC SHA-256, per-row PostgreSQL `SAVEPOINT` pada commit import.
+  - **FIX-006 (P1):** Satu Sumber Kelengkapan Biodata dari Backend — Authoritative endpoint `/api/students/completeness-summary`, eliminasi kalkulasi lokal 25% di frontend list siswa, sinkronisasi denominator 10-section scoring.
+  - **FIX-007 (P0/P1):** Kontrak API/DTO, RBAC & Keamanan Menyeluruh — Penyelarasan alias field pengukuran (`measurementDate`/`measuredAt`) dan bantuan (`aidSource`/`programName`, `startDate`/`year`), penegakan otorisasi granular (`canReadSensitiveIdentity`, `canReadHealthMedical`, `canReadAidIncome`, `canManageDocuments`, `canReviewDocuments`), penguatan sanitizer audit rekursif.
+  - **FIX-008 (P1):** Draft, Karakteristik & Pengajuan Wali — Conditional draft finalization lock `where status = 'ACTIVE'`, integrasi submission karakteristik santri, pemisahan mutasi alamat `IDENTITY` dan `DOMICILE` pada review usulan wali murid.
+  - **FIX-009 (P1):** Regression Test Suite & Dokumen Laporan — Test suite `tests/student-master.test.ts` diperluas mencakup 19 unit test lulus (TC-01 s/d TC-100 logic coverage), laporan resmi tersusun di `LAPORAN_FIX_MASTER_SISWA_V3_UI_FREEZE.md`.
 - **Bukti Verifikasi Aktual:**
-  - `npm run typecheck` (tsc --noEmit): **LULUS (Exit code 0, 0 error)**
-  - `npx tsx --test tests/student-master.test.ts`: **LULUS (14/14 tests passed, 0 failed)**
-- **Laporan Finishing Resmi:** `docs/fitur/kelengkapan-master-siswa/LAPORAN_FINISHING_MASTER_SISWA.md`
+  - `npm run typecheck` (`tsc --noEmit`): **LULUS (Exit code 0, 0 error)**
+  - `npx tsx --test tests/student-master.test.ts`: **LULUS (19 of 19 tests passed, 0 failed, 1.1s)**
+- **Kepatuhan Larangan Operasional:**
+  - `drizzle-kit push` / `db:migrate` live: **TIDAK DIJALANKAN (Aman, menunggu tiket DAT-001)**
+  - `npm run build` / `npm run dev`: **TIDAK DIJALANKAN (Aman, sesuai instruksi)**
+  - Perombakan visual UI: **0 PERUBAHAN VISUAL (MANDATORY UI FREEZE ditaati 100%)**
+- **Laporan Resmi:** `LAPORAN_FIX_MASTER_SISWA_V3_UI_FREEZE.md` & `docs/fitur/kelengkapan-master-siswa/LAPORAN_FIX_MASTER_SISWA_V3_UI_FREEZE.md`

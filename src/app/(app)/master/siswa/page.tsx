@@ -38,16 +38,25 @@ import {
 import { api } from "@/src/lib/api";
 import type { AppState } from "@/server/state";
 import { formatDateIndo } from "@/src/lib/formatters";
+import * as XLSX from "xlsx";
 
 type Student = AppState["students"][number];
 
-function estimateCompleteness(s: Student): number {
+function calculateCompletenessScore(
+  s: Student,
+  summaryMap?: Record<string, { percentage: number }>,
+): number {
+  if (summaryMap && summaryMap[s.id]) {
+    return summaryMap[s.id].percentage;
+  }
   let score = 0;
-  const totalSections = 10;
-  if (s.name && s.nis && (s.gender || s.birthDate)) score += 1;
-  if (s.classId && s.enrolledOn) score += 1;
-  if (s.photoUrl) score += 0.5;
-  return Math.round((score / totalSections) * 100);
+  const total = 5;
+  if (s.name) score += 1;
+  if (s.nis) score += 1;
+  if (s.gender) score += 1;
+  if (s.classId) score += 1;
+  if (s.enrolledOn) score += 1;
+  return Math.round((score / total) * 100);
 }
 
 export default function MasterSiswaPage() {
@@ -98,7 +107,11 @@ export default function MasterSiswaPage() {
   const classes = state?.classes || [];
   const academicYears = state?.academicYears || [];
 
-  // Fetch drafts & change requests on mount
+  const [completenessSummary, setCompletenessSummary] = useState<
+    Record<string, { percentage: number; isComplete: boolean; missingCount: number }>
+  >({});
+
+  // Fetch drafts, change requests & completeness summary on mount
   useEffect(() => {
     fetch("/api/student-drafts")
       .then((res) => (res.ok ? res.json() : { drafts: [] }))
@@ -109,6 +122,11 @@ export default function MasterSiswaPage() {
       .then((res) => (res.ok ? res.json() : { requests: [] }))
       .then((data) => setChangeRequests(data.requests || (Array.isArray(data) ? data : [])))
       .catch(() => setChangeRequests([]));
+
+    fetch("/api/students/completeness-summary")
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data) => setCompletenessSummary(data || {}))
+      .catch(() => {});
   }, []);
 
   const pendingRequests = useMemo(
@@ -127,9 +145,11 @@ export default function MasterSiswaPage() {
       if (statusFilter === "INACTIVE" && s.active) return false;
 
       // Filter by completeness
-      const comp = estimateCompleteness(s);
-      if (completenessFilter === "COMPLETE" && comp < 80) return false;
-      if (completenessFilter === "INCOMPLETE" && comp >= 80) return false;
+      const comp =
+        completenessSummary[s.id]?.percentage ??
+        calculateCompletenessScore(s, completenessSummary);
+      if (completenessFilter === "COMPLETE" && comp < 100) return false;
+      if (completenessFilter === "INCOMPLETE" && comp >= 100) return false;
 
       // Filter by search
       if (search.trim()) {
@@ -142,7 +162,14 @@ export default function MasterSiswaPage() {
 
       return true;
     });
-  }, [students, selectedClass, statusFilter, completenessFilter, search]);
+  }, [
+    students,
+    selectedClass,
+    statusFilter,
+    completenessFilter,
+    search,
+    completenessSummary,
+  ]);
 
   const handleDelete = async () => {
     if (!studentToDelete) return;
@@ -197,15 +224,21 @@ export default function MasterSiswaPage() {
     [students],
   );
   const completeCount = useMemo(
-    () => students.filter((s) => estimateCompleteness(s) >= 80).length,
-    [students],
+    () =>
+      students.filter((s) => {
+        const comp =
+          completenessSummary[s.id]?.percentage ??
+          calculateCompletenessScore(s, completenessSummary);
+        return comp >= 100;
+      }).length,
+    [students, completenessSummary],
   );
   const incompleteCount = useMemo(
     () => students.length - completeCount,
     [students, completeCount],
   );
 
-  // CSV Export handler
+  // XLSX & CSV Export handler
   const handleExportCsv = () => {
     const listToExport = exportScope === "FILTERED" ? filteredStudents : students;
     const headers: string[] = [];
@@ -216,14 +249,11 @@ export default function MasterSiswaPage() {
       headers.push("KELAS", "STATUS_SISWA");
     }
 
-    const sanitizeCell = (val: string) => {
+    const sanitizeCell = (val: string | null | undefined): string => {
       let clean = String(val || "").trim();
       // Formula injection guard
-      if (["=", "+", "-", "@"].includes(clean.charAt(0))) {
+      if (["=", "+", "-", "@", "\t", "\r"].includes(clean.charAt(0))) {
         clean = `'${clean}`;
-      }
-      if (clean.includes(",") || clean.includes('"') || clean.includes("\n")) {
-        clean = `"${clean.replace(/"/g, '""')}"`;
       }
       return clean;
     };
@@ -247,25 +277,32 @@ export default function MasterSiswaPage() {
           sanitizeCell(s.active ? "Aktif" : "Non-Aktif"),
         );
       }
-      return row.join(",");
+      return row;
     });
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, "Data_Siswa");
+    const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Data_Siswa_SDIT_At_Taqwim_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `Data_Siswa_SDIT_At_Taqwim_${new Date().toISOString().split("T")[0]}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     setShowExportModal(false);
   };
 
-  // Download Sample Template CSV
+  // Download Sample Template XLSX
   const handleDownloadTemplate = () => {
     const templateHeaders = [
       "NIS",
       "NISN",
+      "NIK",
+      "NO_KK",
       "NAMA_LENGKAP",
       "JENIS_KELAMIN",
       "TEMPAT_LAHIR",
@@ -279,6 +316,8 @@ export default function MasterSiswaPage() {
     const sampleRow = [
       "262701099",
       "0158912345",
+      "3201011505180001",
+      "3201012001150002",
       "Ahmad Fauzan Al-Baqir",
       "L",
       "Bogor",
@@ -289,46 +328,48 @@ export default function MasterSiswaPage() {
       "081234567890",
       "Jl. Pasirangin No. 12 RT 02/03",
     ];
-    const csv = "\uFEFF" + [templateHeaders.join(","), sampleRow.join(",")].join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([templateHeaders, sampleRow]);
+    XLSX.utils.book_append_sheet(wb, ws, "Template_Siswa");
+    const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "Template_Import_Siswa_SDIT_At_Taqwim.csv";
+    a.download = "Template_Import_Siswa_SDIT_At_Taqwim.xlsx";
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Import File Parser
+  // Import File Parser (XLSX and CSV)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
-      const text = evt.target?.result as string;
-      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      if (lines.length < 2) {
-        setImportErrors(["Berkas data kosong atau tidak memiliki baris data."]);
-        return;
-      }
-
-      const headers = lines[0]
-        .split(",")
-        .map((h) => h.replace(/^["'\uFEFF]|["']$/g, "").trim().toUpperCase());
-      const rawRows: Record<string, string>[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map((v) => v.replace(/^"|"$/g, "").trim());
-        const rowData: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          rowData[h] = values[idx] || "";
-        });
-        rawRows.push(rowData);
-      }
-
       try {
         setIsProcessingImport(true);
+        const buffer = evt.target?.result as ArrayBuffer;
+        const wb = XLSX.read(buffer, { type: "array", raw: false, cellText: true });
+        const firstSheetName = wb.SheetNames[0];
+        if (!firstSheetName) {
+          setImportErrors(["Berkas lembar kerja kosong."]);
+          return;
+        }
+        const ws = wb.Sheets[firstSheetName];
+        const rawRows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, {
+          defval: "",
+          raw: false,
+        });
+
+        if (rawRows.length === 0) {
+          setImportErrors(["Berkas data kosong atau tidak memiliki baris data."]);
+          return;
+        }
+
         const preview = await api<any>("students/import/preview", "POST", rawRows);
         setImportRows(preview.rows || []);
         const errs: string[] = [];
@@ -345,7 +386,7 @@ export default function MasterSiswaPage() {
         setIsProcessingImport(false);
       }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -730,7 +771,9 @@ export default function MasterSiswaPage() {
                   const academicYear = academicYears.find(
                     (y) => y.id === classItem?.academicYearId,
                   );
-                  const completenessPercent = estimateCompleteness(s);
+                  const completenessPercent =
+                    completenessSummary[s.id]?.percentage ??
+                    calculateCompletenessScore(s, completenessSummary);
 
                   return (
                     <tr key={s.id} className="st-table-row">
@@ -1157,7 +1200,7 @@ export default function MasterSiswaPage() {
                     onClick={handleDownloadTemplate}
                     style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}
                   >
-                    <Download size={14} /> Unduh Template CSV (.csv)
+                    <Download size={14} /> Unduh Template Excel (.xlsx)
                   </button>
                   <button
                     type="button"
@@ -1177,7 +1220,7 @@ export default function MasterSiswaPage() {
               <div>
                 <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 2: Pilih Berkas Excel / CSV</h4>
                 <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
-                  Pilih berkas CSV atau XLSX yang sudah Anda lengkapi sesuai template.
+                  Pilih berkas XLSX atau CSV yang sudah Anda lengkapi sesuai template.
                 </p>
                 <div
                   style={{
@@ -1193,7 +1236,7 @@ export default function MasterSiswaPage() {
                   <p style={{ margin: "0 0 10px", fontSize: 12 }}>Pilih file dari komputer Anda:</p>
                   <input
                     type="file"
-                    accept=".csv, text/csv"
+                    accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv"
                     onChange={handleFileUpload}
                     style={{ fontSize: 12 }}
                   />

@@ -12,6 +12,7 @@ import {
   hashPassword,
   HttpError,
   isGuardian,
+  isSchemaNotReady,
   limitLogin,
   ownStudent,
   requireValue,
@@ -65,6 +66,8 @@ import {
   reviewProfileChange,
   previewStudentImport,
   commitStudentImport,
+  generateStudentImportTemplateXlsx,
+  getStudentsCompletenessSummary,
 } from "./studentMaster";
 const json = (value: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(value, {
@@ -249,6 +252,23 @@ export async function handle(
     if (docMatch && method === "GET") {
       const dId = uuid.parse(docMatch[1]);
       return await downloadStudentDocument(db, ctx, dId, request);
+    }
+    if (path === "students/import/template" && method === "GET") {
+      const buffer = generateStudentImportTemplateXlsx();
+      return new Response(buffer as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition":
+            'attachment; filename="Template_Import_Siswa_SDIT_At_Taqwim.xlsx"',
+          "Cache-Control": "private, no-cache",
+        },
+      });
+    }
+    if (path === "students/completeness-summary" && method === "GET") {
+      const classId = url.searchParams.get("classId") || undefined;
+      return json(await getStudentsCompletenessSummary(db, actor, classId));
     }
     if (path === "students/import/preview" && method === "POST") {
       const rows = z.array(z.record(z.string(), z.string())).parse(await payload(request));
@@ -925,11 +945,12 @@ export async function handle(
     throw new HttpError(404, "Endpoint tidak ditemukan");
   } catch (error) {
     if (error instanceof HttpError)
-      return json({ error: error.message }, error.status);
+      return json({ error: error.message, code: error.code || "HTTP_ERROR" }, error.status);
     if (error instanceof z.ZodError)
       return json(
         {
           error: "Data tidak valid",
+          code: "VALIDATION_ERROR",
           details: error.issues.map((i) => ({
             path: i.path.join("."),
             message: i.message,
@@ -937,22 +958,31 @@ export async function handle(
         },
         422,
       );
+    if (isSchemaNotReady(error)) {
+      return json(
+        {
+          error: "Skema database Master Siswa belum siap. Silakan jalankan migrasi database.",
+          code: "SCHEMA_NOT_READY",
+        },
+        503,
+      );
+    }
     const code =
       (error as { code?: string; cause?: { code?: string } }).code ||
       (error as { cause?: { code?: string } }).cause?.code;
     if (code === "23505")
-      return json({ error: "Data sudah ada; duplikasi tidak diizinkan" }, 409);
+      return json({ error: "Data sudah ada; duplikasi tidak diizinkan", code: "DUPLICATE_ENTRY" }, 409);
     if (code === "23503")
       return json(
-        { error: "Data masih digunakan atau relasi tidak ditemukan" },
+        { error: "Data masih digunakan atau relasi tidak ditemukan", code: "RELATION_VIOLATION" },
         409,
       );
     if (code === "23514" || code === "22P02")
-      return json({ error: "Data tidak memenuhi aturan database" }, 422);
+      return json({ error: "Data tidak memenuhi aturan database", code: "VALIDATION_ERROR" }, 422);
     console.error("API request failed", {
       type: error instanceof Error ? error.name : "Unknown",
       code,
     });
-    return json({ error: "Layanan belum tersedia. Silakan coba kembali" }, 503);
+    return json({ error: "Layanan belum tersedia. Silakan coba kembali", code: "SERVICE_UNAVAILABLE" }, 503);
   }
 }

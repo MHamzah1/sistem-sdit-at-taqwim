@@ -10,10 +10,17 @@ import {
   maskNik,
   maskPhone,
   ALLOWED_GUARDIAN_PATCH_KEYS,
+  generateStudentImportTemplateXlsx,
 } from "../server/studentMaster";
 import {
   sanitizeForAudit,
   canAccessSensitiveStudentData,
+  canReadSensitiveIdentity,
+  canReadHealthMedical,
+  canReadAidIncome,
+  canManageDocuments,
+  canReviewDocuments,
+  isSchemaNotReady,
   type Actor,
 } from "../server/security";
 
@@ -521,4 +528,121 @@ test("TC-76: studentIdentitySchema validates all 10 recovered schema columns", (
       siblingCount: -1,
     });
   });
+});
+
+test("TC-83: rejects local blob and data URL in photoUrl", () => {
+  assert.throws(() => {
+    studentIdentitySchema.parse({
+      name: "Ahmad",
+      nis: "262701999",
+      classId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+      enrolledOn: "2026-07-15",
+      photoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    });
+  });
+
+  assert.throws(() => {
+    studentIdentitySchema.parse({
+      name: "Ahmad",
+      nis: "262701999",
+      classId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+      enrolledOn: "2026-07-15",
+      photoUrl: "blob:http://localhost:3000/1234-5678",
+    });
+  });
+});
+
+test("TC-85: Granular permissions deny unprivileged access to health, aid, and documents", () => {
+  const readStaff: Actor = {
+    id: "user-read-1",
+    name: "Staff Read",
+    email: "read@example.test",
+    roles: ["GURU"],
+    permissions: ["read"],
+  };
+
+  const financeStaff: Actor = {
+    id: "user-fin-1",
+    name: "Staff Keuangan",
+    email: "finance@example.test",
+    roles: ["TU_KEUANGAN"],
+    permissions: ["read", "finance"],
+  };
+
+  const principal: Actor = {
+    id: "user-kepsek-1",
+    name: "Kepala Sekolah",
+    email: "kepsek@example.test",
+    roles: ["KEPALA_SEKOLAH"],
+    permissions: ["read", "principal", "audit"],
+  };
+
+  const admin: Actor = {
+    id: "user-admin-1",
+    name: "Super Admin",
+    email: "admin@example.test",
+    roles: ["SUPER_ADMIN"],
+    permissions: ["read", "master", "finance", "principal"],
+  };
+
+  assert.equal(canReadSensitiveIdentity(readStaff), false);
+  assert.equal(canReadHealthMedical(readStaff), false);
+  assert.equal(canReadAidIncome(readStaff), false);
+  assert.equal(canManageDocuments(readStaff), false);
+
+  assert.equal(canReadAidIncome(financeStaff), true);
+  assert.equal(canReadHealthMedical(financeStaff), false);
+  assert.equal(canManageDocuments(financeStaff), false);
+
+  assert.equal(canReviewDocuments(principal), true);
+  assert.equal(canManageDocuments(principal), false);
+
+  assert.equal(canReadSensitiveIdentity(admin), true);
+  assert.equal(canReadHealthMedical(admin), true);
+  assert.equal(canReadAidIncome(admin), true);
+  assert.equal(canManageDocuments(admin), true);
+  assert.equal(canReviewDocuments(admin), true);
+});
+
+test("TC-92: isSchemaNotReady accurately detects PostgreSQL SQLSTATE 42P01 and 42703", () => {
+  assert.equal(isSchemaNotReady({ code: "42P01" }), true);
+  assert.equal(isSchemaNotReady({ code: "42703" }), true);
+  assert.equal(isSchemaNotReady({ cause: { code: "42P01" } }), true);
+  assert.equal(isSchemaNotReady({ cause: { code: "42703" } }), true);
+  assert.equal(isSchemaNotReady(new Error('relation "student_addresses" does not exist')), true);
+  assert.equal(isSchemaNotReady(new Error('column "student_status" of relation "students" does not exist')), true);
+  assert.equal(isSchemaNotReady({ code: "23505" }), false);
+  assert.equal(isSchemaNotReady(new Error("Generic validation error")), false);
+});
+
+test("TC-95 & TC-98: periodicMeasurementSchema and aidItemSchema map field aliases correctly", () => {
+  const parsedMeasure = periodicMeasurementSchema.parse({
+    measuredAt: "2026-08-20",
+    heightCm: 125,
+    weightKg: 24,
+    semester: 1,
+  });
+  assert.equal(parsedMeasure.measurementDate, "2026-08-20");
+  assert.equal(parsedMeasure.heightCm, 125);
+  assert.equal(parsedMeasure.weightKg, 24);
+
+  const parsedAid = aidItemSchema.parse({
+    aidType: "KIP",
+    programName: "Kartu Indonesia Pintar SD",
+    year: 2026,
+    amount: 450000,
+    status: "ACTIVE",
+  });
+  assert.equal(parsedAid.aidSource, "Kartu Indonesia Pintar SD");
+  assert.equal(parsedAid.startDate, "2026-01-01");
+  assert.equal(parsedAid.endDate, "2026-12-31");
+});
+
+test("TC-94: generateStudentImportTemplateXlsx generates authentic XLSX binary", () => {
+  const buf = generateStudentImportTemplateXlsx();
+  assert.ok(buf instanceof Uint8Array);
+  assert.ok(buf.length > 100);
+  // OOXML ZIP magic bytes: PK (0x50 0x4B)
+  assert.equal(buf[0], 0x50);
+  assert.equal(buf[1], 0x4b);
 });
