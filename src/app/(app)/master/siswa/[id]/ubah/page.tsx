@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use } from "react";
+import React, { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
@@ -16,13 +16,30 @@ export default function UbahSiswaPage({
   const { id } = use(params);
   const router = useRouter();
   const { state, loading, busy, refresh, setToast, setError } = useApp();
+  const [fullProfile, setFullProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  if (loading || !state) {
+  useEffect(() => {
+    let active = true;
+    api<any>(`students/${id}/profile`)
+      .then((res) => {
+        if (active) setFullProfile(res);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoadingProfile(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (loading || !state || loadingProfile) {
     return (
       <div className="st-page-shell">
         <div className="st-table-loading">
           <div className="st-spinner" />
-          <p>Memuat data siswa...</p>
+          <p>Memuat profil lengkap siswa...</p>
         </div>
       </div>
     );
@@ -45,51 +62,11 @@ export default function UbahSiswaPage({
     );
   }
 
-  const handleSave = async (
-    studentData: {
-      name: string;
-      nis: string;
-      nisn: string | null;
-      gender: "L" | "P" | null;
-      classId: string;
-      enrolledOn: string;
-      birthPlace: string | null;
-      birthDate: string | null;
-      photoUrl: string | null;
-      active: boolean;
-    },
-    guardianOption?: {
-      type: "existing" | "new" | "none";
-      guardianId?: string;
-      newGuardian?: { name: string; phone: string };
-    },
-  ) => {
+  const handleSave = async (payload: any) => {
     try {
-      await api(`students/${student.id}`, "PATCH", studentData);
-
-      if (guardianOption?.type === "existing" && guardianOption.guardianId) {
-        await api("guardian-students", "POST", {
-          guardianId: guardianOption.guardianId,
-          studentId: student.id,
-        });
-      } else if (
-        guardianOption?.type === "new" &&
-        guardianOption.newGuardian?.name &&
-        guardianOption.newGuardian?.phone
-      ) {
-        const createdGuardian = await api<{ id: string }>(
-          "guardians",
-          "POST",
-          guardianOption.newGuardian,
-        );
-        await api("guardian-students", "POST", {
-          guardianId: createdGuardian.id,
-          studentId: student.id,
-        });
-      }
-
+      await api(`students/${student.id}/profile`, "PATCH", payload);
       await refresh();
-      setToast(`Data ${studentData.name} berhasil diperbarui`);
+      setToast(`Biodata siswa ${payload.student.name} berhasil diperbarui`);
       router.push(`/master/siswa/${student.id}`);
     } catch (e) {
       setError(
@@ -103,6 +80,7 @@ export default function UbahSiswaPage({
     <StudentFormView
       mode="ubah"
       student={student}
+      initialFullProfile={fullProfile}
       classes={state.classes}
       academicYears={state.academicYears}
       guardians={state.guardians}

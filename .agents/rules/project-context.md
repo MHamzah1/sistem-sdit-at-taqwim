@@ -36,7 +36,7 @@
 7. **Pengingat WhatsApp (Reminder):**
    - Fitur reminder hanya menghasilkan tautan WhatsApp interaktif (`https://wa.me/...`) yang dibuka user, bukan pengiriman otomatis via gateway pihak ketiga.
 8. **Lingkungan Server Lokal:**
-   - Next.js berjalan di port 3000 (`npm run dev`).
+   - Next.js berjalan di port 3002 (`npm run dev`).
 9. **Kredensial & Rahasia:**
    - Dilarang menaruh token, password, atau `AUTH_SECRET` di dalam kode sumber, commit Git, atau respon API.
 

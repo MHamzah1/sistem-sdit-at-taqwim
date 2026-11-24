@@ -4,7 +4,7 @@ Next.js 15 (App Router) + React 19 + TypeScript, Drizzle ORM, Neon PostgreSQL, p
 
 ## Menjalankan lokal
 
-Node.js 24 diperlukan. Salin `.env.example` menjadi `.env` dan isi kredensial development melalui editor lokal, tanpa menaruh secret di chat atau Git. Gunakan database Neon development yang berbeda dari production. `AUTH_SECRET` harus acak minimal 32 karakter; password admin minimal 12 karakter. `APP_ORIGIN=http://localhost:3000`.
+Node.js 24 diperlukan. Salin `.env.example` menjadi `.env` dan isi kredensial development melalui editor lokal, tanpa menaruh secret di chat atau Git. Gunakan database Neon development yang berbeda dari production. `AUTH_SECRET` harus acak minimal 32 karakter; password admin minimal 12 karakter. `APP_ORIGIN=http://localhost:3002`.
 
 ```sh
 npm install
@@ -40,7 +40,7 @@ npm run test:browser
 npm run preflight
 ```
 
-Tes integrasi menggunakan PostgreSQL PGlite terisolasi dan migration production yang sama, bukan SQLite. Data tes hanya hidup dalam fixture terpisah. `test:browser` memakai build `dist` dan server tes pada port 3000. `preflight` memakai environment yang dipilih, memeriksa schema database serta write/read/delete file health sementara di private Blob. Tidak boleh dianggap pengganti smoke test produksi.
+Tes integrasi menggunakan PostgreSQL PGlite terisolasi dan migration production yang sama, bukan SQLite. Data tes hanya hidup dalam fixture terpisah. `test:browser` memakai build `dist` dan server tes pada port 3002. `preflight` memakai environment yang dipilih, memeriksa schema database serta write/read/delete file health sementara di private Blob. Tidak boleh dianggap pengganti smoke test produksi.
 
 ## Dokumentasi
 

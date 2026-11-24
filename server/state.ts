@@ -19,7 +19,23 @@ export async function readState(db: Database, actor: Actor) {
   const scoped = (column: AnyPgColumn) =>
     guardianOnly ? (ids.length ? inArray(column, ids) : sql`false`) : undefined;
   const students = await db
-    .select()
+    .select({
+      id: s.students.id,
+      nis: s.students.nis,
+      nisn: s.students.nisn,
+      name: s.students.name,
+      gender: s.students.gender,
+      birthPlace: s.students.birthPlace,
+      birthDate: s.students.birthDate,
+      photoUrl: s.students.photoUrl,
+      classId: s.students.classId,
+      enrolledOn: s.students.enrolledOn,
+      active: s.students.active,
+      studentStatus: s.students.studentStatus,
+      nickname: s.students.nickname,
+      createdAt: s.students.createdAt,
+      updatedAt: s.students.updatedAt,
+    })
     .from(s.students)
     .where(scoped(s.students.id))
     .orderBy(s.students.name);

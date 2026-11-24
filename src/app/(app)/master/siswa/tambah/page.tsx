@@ -21,61 +21,31 @@ export default function TambahSiswaPage() {
     );
   }
 
-  const handleSave = async (
-    studentData: {
-      name: string;
-      nis: string;
-      nisn: string | null;
-      gender: "L" | "P" | null;
-      classId: string;
-      enrolledOn: string;
-      birthPlace: string | null;
-      birthDate: string | null;
-      photoUrl: string | null;
-      active: boolean;
-    },
-    guardianOption?: {
-      type: "existing" | "new" | "none";
-      guardianId?: string;
-      newGuardian?: { name: string; phone: string };
-    },
-  ) => {
+  const handleSave = async (payload: any) => {
     try {
       const createdStudent = await api<{ id: string }>(
-        "students",
+        "students/profile",
         "POST",
-        studentData,
+        payload,
       );
 
-      if (guardianOption?.type === "existing" && guardianOption.guardianId) {
-        await api("guardian-students", "POST", {
-          guardianId: guardianOption.guardianId,
-          studentId: createdStudent.id,
-        });
-      } else if (
-        guardianOption?.type === "new" &&
-        guardianOption.newGuardian?.name &&
-        guardianOption.newGuardian?.phone
-      ) {
-        const createdGuardian = await api<{ id: string }>(
-          "guardians",
-          "POST",
-          guardianOption.newGuardian,
-        );
-        await api("guardian-students", "POST", {
-          guardianId: createdGuardian.id,
-          studentId: createdStudent.id,
-        });
-      }
-
       await refresh();
-      setToast(`Siswa ${studentData.name} berhasil ditambahkan`);
+      setToast(`Siswa ${payload.student.name} berhasil didaftarkan`);
       router.push(`/master/siswa/${createdStudent.id}`);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Gagal menambahkan data siswa",
       );
       throw e;
+    }
+  };
+
+  const handleSaveDraft = async (payload: any) => {
+    try {
+      await api("student-drafts", "POST", payload);
+      setToast("Draf pendaftaran berhasil disimpan sementara");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal menyimpan draf");
     }
   };
 
@@ -88,6 +58,7 @@ export default function TambahSiswaPage() {
       guardianStudents={state.guardianStudents}
       busy={busy}
       onSave={handleSave}
+      onSaveDraft={handleSaveDraft}
       onCancel={() => router.push("/master/siswa")}
     />
   );

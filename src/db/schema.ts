@@ -13,6 +13,7 @@ import {
   index,
   check,
   pgEnum,
+  numeric,
 } from "drizzle-orm/pg-core";
 const id = () => uuid("id").defaultRandom().primaryKey();
 const times = () => ({
@@ -157,6 +158,16 @@ export const students = pgTable(
       .notNull(),
     enrolledOn: date("enrolled_on").notNull(),
     active: boolean("active").default(true).notNull(),
+    nickname: text("nickname"),
+    nik: text("nik"),
+    familyCardNumber: text("family_card_number"),
+    birthCertificateNumber: text("birth_certificate_number"),
+    religion: text("religion"),
+    citizenship: text("citizenship").default("WNI"),
+    birthOrder: integer("birth_order"),
+    siblingCount: integer("sibling_count"),
+    dailyLanguage: text("daily_language"),
+    studentStatus: text("student_status").default("ACTIVE").notNull(),
     ...times(),
   },
   (t) => [
@@ -482,4 +493,226 @@ export const auditLogs = pgTable(
     index("audit_created_idx").on(t.createdAt),
     index("audit_entity_idx").on(t.entity, t.entityId),
   ],
+);
+
+export const studentAddresses = pgTable(
+  "student_addresses",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    addressType: text("address_type").notNull(),
+    address: text("address"),
+    rt: text("rt"),
+    rw: text("rw"),
+    hamlet: text("hamlet"),
+    province: text("province"),
+    regency: text("regency"),
+    district: text("district"),
+    village: text("village"),
+    postalCode: text("postal_code"),
+    residenceType: text("residence_type"),
+    transportationType: text("transportation_type"),
+    distanceToSchool: numeric("distance_to_school"),
+    travelTimeMinutes: integer("travel_time_minutes"),
+    ...times(),
+  },
+  (t) => [index("address_student_idx").on(t.studentId)],
+);
+
+export const familyMembers = pgTable(
+  "family_members",
+  {
+    id: id(),
+    fullName: text("full_name").notNull(),
+    nik: text("nik"),
+    birthPlace: text("birth_place"),
+    birthDate: date("birth_date"),
+    birthYear: integer("birth_year"),
+    lifeStatus: text("life_status").default("ALIVE").notNull(),
+    education: text("education"),
+    occupation: text("occupation"),
+    institutionName: text("institution_name"),
+    monthlyIncomeRange: text("monthly_income_range"),
+    phone: text("phone"),
+    email: text("email"),
+    address: text("address"),
+    ...times(),
+  },
+  (t) => [index("fam_member_nik_idx").on(t.nik)],
+);
+
+export const studentFamilyMembers = pgTable(
+  "student_family_members",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    familyMemberId: uuid("family_member_id")
+      .references(() => familyMembers.id)
+      .notNull(),
+    relationshipType: text("relationship_type").notNull(),
+    isPrimaryContact: boolean("is_primary_contact").default(false).notNull(),
+    isPaymentResponsible: boolean("is_payment_responsible").default(false).notNull(),
+    isEmergencyContact: boolean("is_emergency_contact").default(false).notNull(),
+    ...times(),
+  },
+  (t) => [
+    index("fam_rel_student_idx").on(t.studentId),
+    index("fam_rel_member_idx").on(t.familyMemberId),
+  ],
+);
+
+export const studentEnrollments = pgTable(
+  "student_enrollments",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    registrationNumber: text("registration_number"),
+    registrationType: text("registration_type").default("NEW_STUDENT"),
+    registrationDate: date("registration_date"),
+    acceptedDate: date("accepted_date"),
+    enrollmentDate: date("enrollment_date"),
+    academicYearId: uuid("academic_year_id").references(() => academicYears.id),
+    classId: uuid("class_id").references(() => classes.id),
+    entryGrade: integer("entry_grade"),
+    attendedPaud: boolean("attended_paud"),
+    attendedKindergarten: boolean("attended_kindergarten"),
+    previousSchoolName: text("previous_school_name"),
+    previousSchoolNpsn: text("previous_school_npsn"),
+    previousSchoolAddress: text("previous_school_address"),
+    enrollmentStatus: text("enrollment_status").default("ACTIVE").notNull(),
+    effectiveStartDate: date("effective_start_date"),
+    effectiveEndDate: date("effective_end_date"),
+    notes: text("notes"),
+    ...times(),
+  },
+  (t) => [index("enroll_student_idx").on(t.studentId)],
+);
+
+export const studentHealthProfiles = pgTable(
+  "student_health_profiles",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull()
+      .unique(),
+    bloodType: text("blood_type"),
+    medicalHistory: text("medical_history"),
+    foodAllergies: text("food_allergies"),
+    drugAllergies: text("drug_allergies"),
+    hasSpecialNeeds: boolean("has_special_needs").default(false).notNull(),
+    specialNeedsTypes: jsonb("special_needs_types"),
+    routineMedication: text("routine_medication"),
+    emergencyHandlingNotes: text("emergency_handling_notes"),
+    assistanceNeeds: text("assistance_needs"),
+    notes: text("notes"),
+    ...times(),
+  },
+  (t) => [index("health_student_idx").on(t.studentId)],
+);
+
+export const studentPeriodicData = pgTable(
+  "student_periodic_data",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    academicYearId: uuid("academic_year_id").references(() => academicYears.id),
+    semester: integer("semester"),
+    measurementDate: date("measurement_date").notNull(),
+    heightCm: numeric("height_cm"),
+    weightKg: numeric("weight_kg"),
+    notes: text("notes"),
+    recordedBy: uuid("recorded_by").references(() => users.id),
+    ...times(),
+  },
+  (t) => [index("periodic_student_idx").on(t.studentId)],
+);
+
+export const studentAidRecords = pgTable(
+  "student_aid_records",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    aidType: text("aid_type").notNull(),
+    aidNumber: text("aid_number"),
+    aidSource: text("aid_source"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    status: text("status").default("ACTIVE").notNull(),
+    notes: text("notes"),
+    supportingDocumentId: uuid("supporting_document_id"),
+    ...times(),
+  },
+  (t) => [index("aid_student_idx").on(t.studentId)],
+);
+
+export const studentDocuments = pgTable(
+  "student_documents",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    documentType: text("document_type").notNull(),
+    documentName: text("document_name").notNull(),
+    documentNumber: text("document_number"),
+    storagePath: text("storage_path").notNull(),
+    originalFilename: text("original_filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: integer("file_size").notNull(),
+    verificationStatus: text("verification_status").default("PENDING").notNull(),
+    verifiedBy: uuid("verified_by").references(() => users.id),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    rejectionReason: text("rejection_reason"),
+    uploadedBy: uuid("uploaded_by").references(() => users.id),
+    ...times(),
+  },
+  (t) => [index("doc_student_idx").on(t.studentId)],
+);
+
+export const studentDrafts = pgTable(
+  "student_drafts",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .references(() => users.id)
+      .notNull(),
+    data: jsonb("data").notNull(),
+    status: text("status").default("DRAFT").notNull(),
+    revision: integer("revision").default(1).notNull(),
+    finalStudentId: uuid("final_student_id").references(() => students.id),
+    ...times(),
+  },
+  (t) => [index("draft_user_idx").on(t.userId)],
+);
+
+export const studentProfileChangeRequests = pgTable(
+  "student_profile_change_requests",
+  {
+    id: id(),
+    studentId: uuid("student_id")
+      .references(() => students.id)
+      .notNull(),
+    requestedBy: uuid("requested_by")
+      .references(() => users.id)
+      .notNull(),
+    patch: jsonb("patch").notNull(),
+    status: text("status").default("SUBMITTED").notNull(),
+    revision: integer("revision").default(1).notNull(),
+    reviewerId: uuid("reviewer_id").references(() => users.id),
+    rejectionReason: text("rejection_reason"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    ...times(),
+  },
+  (t) => [index("change_req_student_idx").on(t.studentId)],
 );

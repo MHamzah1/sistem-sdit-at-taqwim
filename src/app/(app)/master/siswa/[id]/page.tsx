@@ -32,6 +32,19 @@ export default function DetailSiswaPage({
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [selectedGuardianId, setSelectedGuardianId] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [fullProfile, setFullProfile] = useState<any>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    api<any>(`students/${id}/profile`)
+      .then((res) => {
+        if (active) setFullProfile(res);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [id]);
 
   if (loading || !state) {
     return (
@@ -128,6 +141,7 @@ export default function DetailSiswaPage({
     <>
       <StudentDetailView
         student={student}
+        fullProfile={fullProfile}
         classes={state.classes}
         academicYears={state.academicYears}
         invoices={state.invoices}

@@ -626,7 +626,7 @@ Preflight memeriksa:
 ### Daftar Perintah Operasional CLI
 
 ```sh
-# Menjalankan server pengembangan terpadu (Port 3000)
+# Menjalankan server pengembangan terpadu (Port 3002)
 npm run dev
 
 # Memeriksa tipe data TypeScript

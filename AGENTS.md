@@ -11,7 +11,7 @@ Dokumen ini adalah aturan konstitusi dan panduan operasional proyek untuk seluru
 - **Arsitektur Backend:** Next.js Route Handlers (`app/api/[[...route]]/route.ts`), Web Fetch API, Controller di `server/app.ts` & `server/business.ts`
 - **Database & ORM:** PostgreSQL (Neon Serverless) dengan Drizzle ORM (`src/db/schema.ts`), pengujian terisolasi via PGlite
 - **Penyimpanan Berkas:** Private Vercel Blob (`@vercel/blob`) untuk bukti transfer
-- **Server Lokal:** Berjalan terpadu di port 3000 (`npm run dev`)
+- **Server Lokal:** Berjalan terpadu di port 3002 (`npm run dev`)
 
 ---
 

@@ -62,6 +62,6 @@ Skill pendukung lainnya:
 7. **`_ACTIVE-TASK.md`:**
    Mencatat tepat satu objek pekerjaan yang sedang aktif dikerjakan. File ini dihapus otomatis saat objek ditutup melalui `/laporan`.
 8. **Lingkungan Kerja:**
-   - Aplikasi berjalan di Next.js port 3000 (`npm run dev`).
+   - Aplikasi berjalan di Next.js port 3002 (`npm run dev`).
    - Database development menggunakan Neon PostgreSQL yang dikonfigurasi pada `.env` (`DATABASE_URL`).
    - Database testing menggunakan PostgreSQL terisolasi berbasis PGlite (`npm test`).

@@ -40,7 +40,30 @@ import {
 } from "../src/data";
 import { createUser, isResource, mutateResource } from "./resources";
 import { readState } from "./state";
-import { downloadProof, registerProof, uploadToken } from "./files";
+import {
+  downloadProof,
+  downloadStudentDocument,
+  registerProof,
+  uploadToken,
+} from "./files";
+import {
+  createStudentAtomic,
+  updateStudentProfile,
+  getStudentFullProfile,
+  fullStudentProfileSchema,
+  searchFamilyMembers,
+  saveStudentDraft,
+  getStudentDrafts,
+  getStudentDraftById,
+  deleteStudentDraft,
+  addPeriodicMeasurement,
+  addStudentAid,
+  registerStudentDocument,
+  reviewStudentDocument,
+  requestProfileChange,
+  getProfileChangeRequests,
+  reviewProfileChange,
+} from "./studentMaster";
 const json = (value: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(value, {
     status,
@@ -176,6 +199,97 @@ export async function handle(
     }
     if (path === "users" && method === "POST")
       return json(await createUser(db, ctx, await payload(request)), 201);
+
+    // --- Master Siswa Endpoints ---
+    if (path === "students/profile" && method === "POST") {
+      const data = fullStudentProfileSchema.parse(await payload(request));
+      return json(await createStudentAtomic(db, ctx, data), 201);
+    }
+    let studentMatch = /^students\/([^/]+)\/profile$/.exec(path);
+    if (studentMatch) {
+      const sId = uuid.parse(studentMatch[1]);
+      if (method === "GET") {
+        return json(await getStudentFullProfile(db, actor, sId));
+      }
+      if (method === "PATCH") {
+        const data = fullStudentProfileSchema.parse(await payload(request));
+        return json(await updateStudentProfile(db, ctx, sId, data));
+      }
+    }
+    studentMatch = /^students\/([^/]+)\/measurements$/.exec(path);
+    if (studentMatch && method === "POST") {
+      const sId = uuid.parse(studentMatch[1]);
+      return json(await addPeriodicMeasurement(db, ctx, sId, await payload(request)), 201);
+    }
+    studentMatch = /^students\/([^/]+)\/aid$/.exec(path);
+    if (studentMatch && method === "POST") {
+      const sId = uuid.parse(studentMatch[1]);
+      return json(await addStudentAid(db, ctx, sId, await payload(request)), 201);
+    }
+    studentMatch = /^students\/([^/]+)\/documents$/.exec(path);
+    if (studentMatch && method === "POST") {
+      const sId = uuid.parse(studentMatch[1]);
+      return json(await registerStudentDocument(db, ctx, sId, await payload(request)), 201);
+    }
+    let docMatch = /^student-documents\/([^/]+)\/review$/.exec(path);
+    if (docMatch && method === "POST") {
+      const dId = uuid.parse(docMatch[1]);
+      const body = z
+        .object({
+          status: z.enum(["VERIFIED", "REJECTED"]),
+          rejectionReason: z.string().optional(),
+        })
+        .strict()
+        .parse(await payload(request));
+      return json(await reviewStudentDocument(db, ctx, dId, body.status, body.rejectionReason));
+    }
+    docMatch = /^student-documents\/([^/]+)\/content$/.exec(path);
+    if (docMatch && method === "GET") {
+      const dId = uuid.parse(docMatch[1]);
+      return await downloadStudentDocument(db, ctx, dId, request);
+    }
+    if (path === "family-members/search" && method === "GET") {
+      return json(await searchFamilyMembers(db, actor, url.searchParams.get("q") || ""));
+    }
+    if (path === "student-drafts") {
+      if (method === "GET") return json(await getStudentDrafts(db, actor));
+      if (method === "POST") return json(await saveStudentDraft(db, actor, await payload(request)), 201);
+    }
+    let draftMatch = /^student-drafts\/([^/]+)$/.exec(path);
+    if (draftMatch) {
+      const drId = uuid.parse(draftMatch[1]);
+      if (method === "GET") return json(await getStudentDraftById(db, actor, drId));
+      if (method === "PATCH") return json(await saveStudentDraft(db, actor, await payload(request), drId));
+      if (method === "DELETE") return json(await deleteStudentDraft(db, actor, drId));
+    }
+    draftMatch = /^student-drafts\/([^/]+)\/finalize$/.exec(path);
+    if (draftMatch && method === "POST") {
+      const drId = uuid.parse(draftMatch[1]);
+      const input = fullStudentProfileSchema.parse(await payload(request));
+      input.draftId = drId;
+      return json(await createStudentAtomic(db, ctx, input), 201);
+    }
+    studentMatch = /^students\/([^/]+)\/change-requests$/.exec(path);
+    if (studentMatch && method === "POST") {
+      const sId = uuid.parse(studentMatch[1]);
+      return json(await requestProfileChange(db, ctx, sId, await payload(request)), 201);
+    }
+    if (path === "student-change-requests" && method === "GET") {
+      return json(await getProfileChangeRequests(db, actor));
+    }
+    let changeMatch = /^student-change-requests\/([^/]+)\/review$/.exec(path);
+    if (changeMatch && method === "POST") {
+      const rId = uuid.parse(changeMatch[1]);
+      const body = z
+        .object({
+          approved: z.boolean(),
+          rejectionReason: z.string().optional(),
+        })
+        .strict()
+        .parse(await payload(request));
+      return json(await reviewProfileChange(db, ctx, rId, body.approved, body.rejectionReason));
+    }
+
     const resourcePath = path.startsWith("spp/config")
       ? "spp/config"
       : path.split("/")[0];

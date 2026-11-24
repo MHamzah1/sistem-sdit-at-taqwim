@@ -7,7 +7,7 @@ import { handle } from "../server/app";
 const f = await fixture();
 const server = createServer(async (req, res) => {
   try {
-    const url = new URL(req.url || "/", "http://localhost:3000");
+    const url = new URL(req.url || "/", "http://localhost:3002");
     if (url.pathname.startsWith("/api/")) {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -48,7 +48,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(500).end();
   }
 });
-await new Promise<void>((r) => server.listen(3000, "127.0.0.1", r));
+await new Promise<void>((r) => server.listen(3002, "127.0.0.1", r));
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
@@ -61,7 +61,7 @@ page.on("response", (r) => {
 });
 page.setDefaultTimeout(10000);
 try {
-  await page.goto("http://localhost:3000/dashboard");
+  await page.goto("http://localhost:3002/dashboard");
   await page.getByLabel("Email", { exact: true }).fill(f.email);
   await page.getByLabel("Password", { exact: true }).fill(f.password);
   await page.getByRole("button", { name: "Masuk", exact: true }).click();
@@ -122,11 +122,11 @@ try {
     .click();
   await expect(modal).toHaveCount(0);
   await expect(page.getByText("Lunas", { exact: true })).toBeVisible();
-  await page.goto("http://localhost:3000/master/siswa");
+  await page.goto("http://localhost:3002/master/siswa");
   await expect(page.getByText("Siswa Browser", { exact: true })).toBeVisible();
   const localKeys = await page.evaluate(() => Object.keys(localStorage));
   expect(localKeys).toEqual([]);
-  await page.goto("http://localhost:3000/dashboard");
+  await page.goto("http://localhost:3002/dashboard");
   await expect(
     page.getByRole("heading", { name: "Selamat datang, Administrator" }),
   ).toBeVisible();
@@ -158,7 +158,7 @@ try {
   const secondContext = await browser.newContext();
   try {
     const secondPage = await secondContext.newPage();
-    await secondPage.goto("http://localhost:3000/master/siswa");
+    await secondPage.goto("http://localhost:3002/master/siswa");
     await secondPage.getByLabel("Email", { exact: true }).fill(f.email);
     await secondPage.getByLabel("Password", { exact: true }).fill(f.password);
     await secondPage

@@ -15,10 +15,13 @@ import {
   ArrowRight,
   FileCheck2,
   IdCard,
+  CheckCircle2,
 } from "lucide-react";
 import { useApp } from "@/src/lib/context/AppContext";
 import { Badge } from "@/src/components/Badge";
 import { Panel } from "@/src/components/Panel";
+import { Button } from "@/src/components/ui/button";
+import { Card } from "@/src/components/ui/card";
 import {
   PaymentModal,
   ExamCardModal,
@@ -26,9 +29,10 @@ import {
   type ExamCardData,
 } from "@/src/components/modals";
 import { DataForm, type FormSpec } from "@/src/components/DataForm";
-import { money, formatMonthName } from "@/src/lib/formatters";
+import { money, formatMonthName, formatDateIndo } from "@/src/lib/formatters";
 import { receiptNumber } from "@/src/lib/calculations";
 import { api } from "@/src/lib/api";
+import { cn } from "@/src/lib/utils";
 import type { AppState } from "@/server/state";
 
 type Student = AppState["students"][number];
@@ -147,45 +151,65 @@ export default function DashboardPage() {
     };
 
     return (
-      <div className="st-page-shell">
-        <div className="st-header-card">
-          <div className="st-header-left">
-            <div className="st-header-icon-box">
-              <Users size={28} />
+      <div className="space-y-6">
+        {/* Top Header Card */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 md:p-6 rounded-2xl bg-card border border-border/80 shadow-xs">
+          <div className="flex items-start md:items-center gap-4">
+            <div className="size-12 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 shadow-2xs">
+              <Users className="size-6" />
             </div>
-            <div>
-              <div className="st-breadcrumb">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <span>Portal Wali Murid</span>
                 <span>/</span>
-                <span>Beranda</span>
+                <span className="text-foreground font-semibold">Beranda</span>
               </div>
-              <h1 className="st-title">Selamat Datang, {actor?.name}</h1>
-              <p className="st-subtitle">
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground font-heading">
+                Selamat Datang, {actor?.name}
+              </h1>
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Pantau tagihan SPP, kuitansi resmi, dan kelayakan ujian putra-putri Anda di SDIT AT-TAQWIM.
               </p>
             </div>
           </div>
         </div>
 
+        {/* Exam Period Announcement Banner */}
         {currentExam && (
-          <div className="notice" style={{ marginBottom: 20 }}>
-            <ShieldCheck size={20} />
-            <span>
-              <strong>{currentExam.name}</strong> · Pelaksanaan {currentExam.startDate} s.d {currentExam.endDate}. Syarat lunas SPP sampai <strong>{currentExam.requiredUntilMonth.slice(0, 7)}</strong>.
-            </span>
+          <div className="flex items-start gap-3.5 p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/60 text-emerald-950 shadow-2xs">
+            <div className="size-8 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300/60 flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldCheck className="size-4" />
+            </div>
+            <div className="flex-1 text-xs leading-relaxed space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <strong className="font-semibold text-emerald-900 text-sm">
+                  {currentExam.name}
+                </strong>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200/70 text-emerald-900 border border-emerald-300/80">
+                  Periode Ujian Aktif
+                </span>
+              </div>
+              <p className="text-emerald-800/90 text-xs">
+                Pelaksanaan: <span className="font-medium text-emerald-950">{formatDateIndo(currentExam.startDate)} s.d. {formatDateIndo(currentExam.endDate)}</span> · Syarat Administrasi: Lunas SPP s.d. <span className="font-semibold text-emerald-950">{formatMonthName(currentExam.requiredUntilMonth.slice(0, 7))}</span>.
+              </p>
+            </div>
           </div>
         )}
 
         {students.length === 0 ? (
-          <div className="st-table-card">
-            <div className="st-empty-state">
-              <Users size={48} className="st-empty-icon" />
-              <h3>Akun belum terhubung ke data siswa</h3>
-              <p>Silakan hubungi staf Tata Usaha SDIT AT-TAQWIM untuk menghubungkan akun wali murid Anda dengan santri terdaftar.</p>
+          <Card className="p-8 text-center border-dashed">
+            <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
+              <div className="size-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                <Users className="size-6" />
+              </div>
+              <h3 className="text-base font-bold text-foreground font-heading">Akun belum terhubung ke data siswa</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Silakan hubungi staf Tata Usaha SDIT AT-TAQWIM untuk menghubungkan akun wali murid Anda dengan santri terdaftar.
+              </p>
             </div>
-          </div>
+          </Card>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 20 }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {students.map((s) => {
               const studentDebts = debts(s.id);
               const studentBalance = balance(s.id);
@@ -199,72 +223,148 @@ export default function DashboardPage() {
                 (p) => p.studentId === s.id && p.status === "APPROVED",
               );
 
+              // Fix: Clean redundant "Kelas Kelas" prefix
+              const rawClass = className(s.classId);
+              const displayClass = rawClass.startsWith("Kelas")
+                ? rawClass
+                : `Kelas ${rawClass}`;
+
               return (
-                <div key={s.id} className="st-section-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div className="st-user-avatar-placeholder" style={{ width: 44, height: 44, fontSize: 16 }}>
+                <Card
+                  key={s.id}
+                  className="flex flex-col justify-between overflow-hidden border border-border/80 shadow-xs hover:shadow-sm transition-all duration-150 bg-card p-5 gap-4"
+                >
+                  <div className="space-y-4">
+                    {/* Header: Avatar, Name, NIS, Class, Status Badge */}
+                    <div className="flex items-start justify-between gap-3 pb-3 border-b border-border/60">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="size-11 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold flex items-center justify-center text-sm shrink-0 shadow-2xs">
                           {s.name.slice(0, 2).toUpperCase()}
                         </div>
-                        <div>
-                          <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{s.name}</h3>
-                          <span style={{ fontSize: 12, color: "#64748b" }}>
-                            NIS: {s.nis} · Kelas {className(s.classId)}
+                        <div className="flex flex-col min-w-0">
+                          <h3 className="text-base font-bold text-foreground truncate font-heading">
+                            {s.name}
+                          </h3>
+                          <span className="text-xs text-muted-foreground truncate">
+                            NIS: {s.nis} · {displayClass}
                           </span>
                         </div>
                       </div>
                       <Badge status={elig?.status || "NOT_EVALUATED"} />
                     </div>
 
-                    <div style={{ background: "#f8fafc", padding: 12, borderRadius: 8, marginBottom: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 13, color: "#64748b" }}>Kewajiban Belum Lunas:</span>
-                        <strong style={{ fontSize: 16, color: studentBalance > 0 ? "#b91c1c" : "#16613e" }}>
+                    {/* Balance Alert Box */}
+                    <div
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                        studentBalance > 0
+                          ? "bg-rose-50/60 border-rose-200/80 text-rose-950"
+                          : "bg-emerald-50/60 border-emerald-200/80 text-emerald-950"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "size-2 rounded-full",
+                            studentBalance > 0 ? "bg-rose-600 animate-pulse" : "bg-emerald-600"
+                          )}
+                        />
+                        <span className="text-xs font-semibold">
+                          Kewajiban Belum Lunas:
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <strong
+                          className={cn(
+                            "text-base font-bold font-mono tracking-tight",
+                            studentBalance > 0 ? "text-rose-700" : "text-emerald-700"
+                          )}
+                        >
                           {money(studentBalance)}
                         </strong>
+                        {studentBalance === 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-200/70 text-emerald-900">
+                            Lunas
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Invoices list */}
-                    {studentDebts.length > 0 && (
-                      <div style={{ marginBottom: 14 }}>
-                        <small style={{ fontWeight: 600, color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
-                          Rincian Tagihan Tertunggak:
-                        </small>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {/* Unpaid Invoices or All Paid Reassurance */}
+                    {studentDebts.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <span>Rincian Tagihan Tertunggak</span>
+                          <span className="text-rose-600 font-semibold">{studentDebts.length} Bulan</span>
+                        </div>
+                        <div className="space-y-1.5">
                           {studentDebts.map((inv) => (
-                            <div key={inv.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "4px 8px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6 }}>
-                              <span>Bulan {inv.month.slice(0, 7)} · {money(inv.amount)}</span>
+                            <div
+                              key={inv.id}
+                              className="flex items-center justify-between p-2.5 rounded-lg bg-card border border-rose-200/70 shadow-2xs text-xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="size-3.5 text-rose-500 shrink-0" />
+                                <span className="font-medium text-foreground">
+                                  Bulan {formatMonthName(inv.month.slice(0, 7))} ·{" "}
+                                  <strong className="text-rose-700 font-bold font-mono">{money(inv.amount)}</strong>
+                                </span>
+                              </div>
                               <Badge status={inv.status} />
                             </div>
                           ))}
                         </div>
                       </div>
+                    ) : (
+                      <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/40 p-3 flex items-start gap-3">
+                        <CheckCircle2 className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="flex flex-col text-xs">
+                          <strong className="font-semibold text-emerald-900">
+                            Semua Tagihan SPP Lunas
+                          </strong>
+                          <p className="text-[11px] text-emerald-700/90 leading-relaxed mt-0.5">
+                            Tidak ada tunggakan pembayaran. Santri tertib administrasi sekolah.
+                          </p>
+                        </div>
+                      </div>
                     )}
 
-                    {/* Receipts list */}
+                    {/* Approved Receipts List */}
                     {approvedPayments.length > 0 && (
-                      <div style={{ marginBottom: 14 }}>
-                        <small style={{ fontWeight: 600, color: "#16613e", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
-                          Kuitansi Pembayaran Sah:
-                        </small>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                          <div className="flex items-center gap-1.5">
+                            <ReceiptText className="size-3.5" />
+                            <span>Kuitansi Pembayaran Sah</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">
+                            {approvedPayments.length} Pembayaran
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
                           {approvedPayments.slice(0, 3).map((p) => (
-                            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "6px 8px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6 }}>
-                              <div>
-                                <strong>{receiptNumber(p.paidOn, p.id)}</strong>
-                                <div style={{ fontSize: 11, color: "#166534" }}>{p.paidOn} · {money(p.amount)}</div>
+                            <div
+                              key={p.id}
+                              className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/70 hover:bg-muted/70 transition-colors text-xs"
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <strong className="font-mono text-xs text-foreground truncate">
+                                  {receiptNumber(p.paidOn, p.id)}
+                                </strong>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {formatDateIndo(p.paidOn)} · <span className="font-semibold text-emerald-700 font-mono">{money(p.amount)}</span>
+                                </span>
                               </div>
-                              <button
+                              <Button
                                 type="button"
-                                className="st-btn-action pay"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2.5 text-xs text-emerald-800 border-emerald-200 bg-card hover:bg-emerald-50 hover:text-emerald-900 shrink-0 shadow-2xs"
                                 onClick={() => setReceiptPayment(p)}
-                                style={{ padding: "3px 8px", fontSize: 11 }}
                               >
-                                <ReceiptText size={12} />
+                                <ReceiptText className="size-3 mr-1" />
                                 <span>Kuitansi</span>
-                              </button>
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -272,37 +372,63 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, borderTop: "1px solid #e2e8f0", paddingTop: 12, marginTop: 8 }}>
-                    <button
-                      type="button"
-                      className="st-btn-primary"
-                      onClick={() => setPaymentStudentId(s.id)}
-                      style={{ flex: 1, justifyContent: "center" }}
-                    >
-                      <CircleDollarSign size={15} />
-                      <span>Upload Pembayaran</span>
-                    </button>
-                    {isEligible ? (
-                      <button
-                        type="button"
-                        className="st-btn-secondary"
-                        onClick={() => void handlePrintCard(s)}
-                      >
-                        <IdCard size={15} />
-                        <span>Kartu Ujian</span>
-                      </button>
+                  {/* Card Footer Actions */}
+                  <div className="flex items-center gap-2 pt-3 mt-2 border-t border-border/60">
+                    {studentDebts.length > 0 ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="default"
+                          className="flex-1 gap-2 shadow-xs"
+                          onClick={() => setPaymentStudentId(s.id)}
+                        >
+                          <CircleDollarSign className="size-4" />
+                          <span>Upload Pembayaran</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="gap-2 shrink-0 border-border/80"
+                          onClick={() => handleRequestDispensation(s)}
+                        >
+                          <FileCheck2 className="size-4" />
+                          <span>Dispensasi</span>
+                        </Button>
+                      </>
                     ) : (
-                      <button
-                        type="button"
-                        className="st-btn-secondary"
-                        onClick={() => handleRequestDispensation(s)}
-                      >
-                        <FileCheck2 size={15} />
-                        <span>Dispensasi</span>
-                      </button>
+                      <>
+                        {isEligible ? (
+                          <Button
+                            type="button"
+                            variant="default"
+                            className="flex-1 gap-2 shadow-xs bg-emerald-700 hover:bg-emerald-800 text-white"
+                            onClick={() => void handlePrintCard(s)}
+                          >
+                            <IdCard className="size-4" />
+                            <span>Cetak Kartu Ujian</span>
+                          </Button>
+                        ) : (
+                          <div className="flex-1 flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border/60 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="size-4 text-emerald-600" />
+                              <span>Status Ujian: <strong>Menunggu Evaluasi TU</strong></span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-primary"
+                              onClick={() => router.push("/keuangan/pembayaran")}
+                            >
+                              <span>Riwayat</span>
+                              <ArrowRight className="size-3 ml-1" />
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>

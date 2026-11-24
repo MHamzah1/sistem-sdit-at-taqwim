@@ -37,7 +37,6 @@ export async function uploadToken(db: Database, request: Request) {
     onBeforeGenerateToken: async (pathname) => {
       csrf(request);
       const actor = await authenticate(db, request);
-      if (!isGuardian(actor)) allow(actor, "finance");
       const key = tokenHash(`upload:${actor.id}`);
       const [limit] = await db
         .insert(s.loginAttempts)
@@ -50,16 +49,36 @@ export async function uploadToken(db: Database, request: Request) {
           },
         })
         .returning();
-      if (limit.count > 20)
-        throw new HttpError(429, "Batas 20 upload per jam tercapai");
-      if (
-        !new RegExp(
-          `^proofs/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf)$`,
-        ).test(pathname)
-      )
-        throw new HttpError(422, "Nama file tidak valid");
+      if (limit.count > 50)
+        throw new HttpError(429, "Batas upload per jam tercapai");
+
+      const isProof = pathname.startsWith("proofs/");
+      const isDoc = pathname.startsWith("student-documents/");
+      if (isProof) {
+        if (!isGuardian(actor)) allow(actor, "finance");
+        if (
+          !new RegExp(
+            `^proofs/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf)$`,
+          ).test(pathname)
+        )
+          throw new HttpError(422, "Nama file tidak valid");
+      } else if (isDoc) {
+        if (
+          !new RegExp(
+            `^student-documents/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf|webp)$`,
+          ).test(pathname)
+        )
+          throw new HttpError(422, "Nama file dokumen tidak valid");
+      } else {
+        throw new HttpError(422, "Kategori penyimpanan tidak valid");
+      }
       return {
-        allowedContentTypes: ["image/jpeg", "image/png", "application/pdf"],
+        allowedContentTypes: [
+          "image/jpeg",
+          "image/png",
+          "application/pdf",
+          "image/webp",
+        ],
         maximumSizeInBytes: MAX_PROOF_SIZE,
         validUntil: Date.now() + 5 * 60 * 1000,
         addRandomSuffix: true,
@@ -187,6 +206,51 @@ export async function downloadProof(
       "Content-Type": proof.mimeType,
       "Content-Disposition": `attachment; filename="${proof.filename}"`,
       "Content-Range": `bytes ${start}-${end}/${proof.size}`,
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+export async function downloadStudentDocument(
+  db: Database,
+  ctx: Context,
+  id: string,
+  request: Request,
+) {
+  const doc = requireValue(
+    (
+      await db
+        .select()
+        .from(s.studentDocuments)
+        .where(eq(s.studentDocuments.id, id))
+    )[0],
+    "Dokumen tidak ditemukan",
+  );
+  await ownStudent(db, ctx.actor, doc.studentId);
+
+  const range = request.headers.get("range");
+  const chunk = range && /^bytes=(\d+)-(\d+)$/.exec(range);
+  const start = chunk ? Number(chunk[1]) : 0;
+  const end = chunk
+    ? Math.min(Number(chunk[2]), doc.fileSize - 1)
+    : Math.min(doc.fileSize - 1, 2 * 1024 * 1024 - 1);
+  if (start < 0 || start > end || end - start + 1 > 2 * 1024 * 1024)
+    throw new HttpError(416, "Rentang file tidak valid");
+  const file = requireValue(
+    await get(doc.storagePath, { access: "private", useCache: false }),
+    "File tidak ditemukan",
+  );
+  if (file.statusCode !== 200 || !file.stream)
+    throw new HttpError(404, "File tidak ditemukan di penyimpanan");
+  const bytes = Buffer.from(await new Response(file.stream).arrayBuffer());
+  return new Response(bytes.subarray(start, end + 1), {
+    status: 206,
+    headers: {
+      "Content-Type": doc.mimeType,
+      "Content-Disposition": `inline; filename="${doc.originalFilename}"`,
+      "Content-Range": `bytes ${start}-${end}/${doc.fileSize}`,
       "Accept-Ranges": "bytes",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",

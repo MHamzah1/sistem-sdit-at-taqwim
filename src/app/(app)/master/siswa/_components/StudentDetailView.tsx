@@ -22,8 +22,20 @@ import {
   Printer,
   ChevronRight,
   UserPlus,
+  HeartPulse,
+  Award,
+  BookOpen,
+  FolderOpen,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  Download,
+  AlertCircle,
+  Activity,
+  FileCheck,
 } from "lucide-react";
 import QRCode from "qrcode";
+import { Modal } from "@/src/components/Modal";
 import type { AppState } from "@/server/state";
 import {
   formatDateIndo,
@@ -46,19 +58,21 @@ type ClassItem = AppState["classes"][number];
 type AcademicYear = AppState["academicYears"][number];
 type Invoice = AppState["invoices"][number];
 type Payment = AppState["payments"][number];
+type Dispensation = AppState["dispensations"][number];
+type ExamEligibility = AppState["eligibilities"][number];
+type ExamPeriod = AppState["exams"][number];
 type Guardian = AppState["guardians"][number];
 type GuardianStudent = AppState["guardianStudents"][number];
-type ExamPeriod = AppState["exams"][number];
-type Eligibility = AppState["eligibilities"][number];
 
 interface StudentDetailViewProps {
   student: Student;
+  fullProfile?: any;
   classes: ClassItem[];
   academicYears: AcademicYear[];
   invoices: Invoice[];
   payments: Payment[];
-  dispensations: AppState["dispensations"];
-  eligibilities: Eligibility[];
+  dispensations: Dispensation[];
+  eligibilities: ExamEligibility[];
   exams: ExamPeriod[];
   guardians: Guardian[];
   guardianStudents: GuardianStudent[];
@@ -73,10 +87,21 @@ interface StudentDetailViewProps {
   onPrintCard: (student: Student) => void;
 }
 
-type TabType = "ringkasan" | "keuangan" | "ujian" | "wali";
+type TabType =
+  | "ringkasan"
+  | "biodata"
+  | "akademik"
+  | "wali"
+  | "kesehatan"
+  | "bantuan"
+  | "karakteristik"
+  | "dokumen"
+  | "keuangan"
+  | "ujian";
 
 export function StudentDetailView({
   student,
+  fullProfile,
   classes,
   academicYears,
   invoices,
@@ -98,6 +123,51 @@ export function StudentDetailView({
 }: StudentDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("ringkasan");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [showPrintBiodataModal, setShowPrintBiodataModal] = useState(false);
+  const [showPrintBukuIndukModal, setShowPrintBukuIndukModal] = useState(false);
+
+  // Sub-modal states
+  const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
+  const [measurementForm, setMeasurementForm] = useState({
+    date: new Date().toISOString().split("T")[0],
+    heightCm: "",
+    weightKg: "",
+    headCircumferenceCm: "",
+    semester: "SEMESTER_1",
+    notes: "",
+  });
+  const [isSavingMeasurement, setIsSavingMeasurement] = useState(false);
+
+  const [showAddAidModal, setShowAddAidModal] = useState(false);
+  const [aidForm, setAidForm] = useState({
+    aidType: "PIP",
+    programName: "",
+    year: new Date().getFullYear().toString(),
+    amount: "",
+    status: "ACTIVE",
+    notes: "",
+  });
+  const [isSavingAid, setIsSavingAid] = useState(false);
+
+  const [docReviewModal, setDocReviewModal] = useState<any | null>(null);
+  const [reviewStatus, setReviewStatus] = useState<"VERIFIED" | "REJECTED">("VERIFIED");
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [isSavingReview, setIsSavingReview] = useState(false);
+
+  const profile = fullProfile || {};
+  const addresses = profile.addresses || [];
+  const enrollments = profile.enrollments || [];
+  const family = profile.family || [];
+  const health = profile.health;
+  const measurements = profile.measurements || [];
+  const aidRecords = profile.aidRecords || [];
+  const documents = profile.documents || [];
+  const completeness = profile.completeness;
+
+  const kkAddress = addresses.find((a: any) => a.addressType === "KK") || addresses[0];
+  const domAddress = addresses.find((a: any) => a.addressType === "DOMISILI") || kkAddress;
+
+  const studentExtended = (fullProfile?.student || student) as any;
 
   const studentClass = classes.find((c) => c.id === student.classId);
   const studentYear = academicYears.find(
@@ -148,16 +218,138 @@ export function StudentDetailView({
         )
       : "—";
 
+  // Action handlers
+  const handleSaveMeasurement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!measurementForm.heightCm || !measurementForm.weightKg) {
+      alert("Tinggi dan berat badan wajib diisi.");
+      return;
+    }
+    setIsSavingMeasurement(true);
+    try {
+      const res = await fetch(`/api/students/${student.id}/measurements`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          measuredAt: measurementForm.date,
+          heightCm: Number(measurementForm.heightCm),
+          weightKg: Number(measurementForm.weightKg),
+          headCircumferenceCm: measurementForm.headCircumferenceCm ? Number(measurementForm.headCircumferenceCm) : null,
+          semester: measurementForm.semester,
+          notes: measurementForm.notes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Gagal menyimpan data pengukuran.");
+      }
+      setShowAddMeasurementModal(false);
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSavingMeasurement(false);
+    }
+  };
+
+  const handleSaveAid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingAid(true);
+    try {
+      const res = await fetch(`/api/students/${student.id}/aid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aidType: aidForm.aidType,
+          programName: aidForm.programName || aidForm.aidType,
+          year: Number(aidForm.year),
+          amount: aidForm.amount ? Number(aidForm.amount) : null,
+          status: aidForm.status,
+          notes: aidForm.notes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Gagal menyimpan data bantuan.");
+      }
+      setShowAddAidModal(false);
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSavingAid(false);
+    }
+  };
+
+  const handleReviewDoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docReviewModal) return;
+    setIsSavingReview(true);
+    try {
+      const res = await fetch(`/api/student-documents/${docReviewModal.id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: reviewStatus,
+          verificationNotes: reviewNotes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Gagal memproses verifikasi dokumen.");
+      }
+      setDocReviewModal(null);
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSavingReview(false);
+    }
+  };
+
+  // Mask NIK helper
+  const maskNik = (nik?: string | null) => {
+    if (!nik || nik.length < 8) return nik || "—";
+    return nik.substring(0, 6) + "******" + nik.substring(nik.length - 4);
+  };
+
   return (
     <div className="st-detail-shell">
-      <div className="st-header-actions">
+      {/* Print Style Inject */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-form,
+          #printable-form * {
+            visibility: visible;
+          }
+          #printable-form {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 20px;
+            background: white !important;
+            color: black !important;
+            font-size: 11pt;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <div className="st-header-actions no-print">
         <button type="button" className="st-back-link" onClick={onBack}>
           <ArrowLeft size={16} />
           Kembali ke Daftar Siswa
         </button>
       </div>
 
-      <div className="st-detail-head">
+      <div className="st-detail-head no-print">
         <div>
           <span className="eyebrow">DATA SISWA</span>
           <h1>Detail Siswa</h1>
@@ -167,6 +359,24 @@ export function StudentDetailView({
         </div>
 
         <div className="st-head-button-group">
+          <button
+            type="button"
+            className="st-btn-secondary"
+            onClick={() => setShowPrintBiodataModal(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, padding: "7px 12px" }}
+          >
+            <Printer size={14} />
+            Cetak Formulir A4
+          </button>
+          <button
+            type="button"
+            className="st-btn-secondary"
+            onClick={() => setShowPrintBukuIndukModal(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, padding: "7px 12px" }}
+          >
+            <FileText size={14} />
+            Buku Induk
+          </button>
           {canMaster && (
             <button type="button" className="primary" onClick={onEdit}>
               <Pencil size={14} />
@@ -182,7 +392,8 @@ export function StudentDetailView({
         </div>
       </div>
 
-      <div className="st-idcard-grid">
+      {/* Top Identity Cards */}
+      <div className="st-idcard-grid no-print">
         <section className="st-profile-card">
           <div className="st-profile-card__avatar">
             {student.photoUrl ? (
@@ -360,7 +571,117 @@ export function StudentDetailView({
         </section>
       </div>
 
-      <div className="st-detail-layout">
+      {/* Completeness Banner Card */}
+      {completeness && (
+        <div
+          className="no-print"
+          style={{
+            margin: "16px 0 24px",
+            background: "#ffffff",
+            border: "1px solid var(--border, #e2e8f0)",
+            borderRadius: 12,
+            padding: "16px 20px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <CheckCircle2
+                size={20}
+                color={
+                  completeness.overallPercent === 100
+                    ? "#16613e"
+                    : completeness.overallPercent >= 70
+                    ? "#d97706"
+                    : "#dc2626"
+                }
+              />
+              <div>
+                <strong style={{ fontSize: 14 }}>
+                  Tingkat Kelengkapan Berkas & Biodata Siswa: {completeness.overallPercent}%
+                </strong>
+                <p style={{ margin: 0, fontSize: 11, color: "var(--muted)" }}>
+                  {completeness.overallPercent === 100
+                    ? "Seluruh komponen identitas, orang tua, dan dokumen fisik telah lengkap diverifikasi."
+                    : `Terdapat ${completeness.missingFields?.length || 0} kolom atau berkas yang belum dilengkapi.`}
+                </p>
+              </div>
+            </div>
+            <span
+              className={`st-badge ${
+                completeness.overallPercent === 100
+                  ? "st-badge-green"
+                  : completeness.overallPercent >= 70
+                  ? "st-badge-amber"
+                  : "st-badge-slate"
+              }`}
+              style={{ fontSize: 12, fontWeight: 700 }}
+            >
+              {completeness.overallPercent}% Lengkap
+            </span>
+          </div>
+
+          {/* Progress track */}
+          <div
+            style={{
+              width: "100%",
+              height: 8,
+              background: "#f1f5f9",
+              borderRadius: 4,
+              overflow: "hidden",
+              marginBottom: 12,
+            }}
+          >
+            <div
+              style={{
+                width: `${completeness.overallPercent}%`,
+                height: "100%",
+                background:
+                  completeness.overallPercent === 100
+                    ? "#16613e"
+                    : completeness.overallPercent >= 70
+                    ? "#d97706"
+                    : "#dc2626",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 12,
+              fontSize: 11,
+              color: "#475569",
+            }}
+          >
+            <div>
+              <span>Profil Dasar:</span> <b>{completeness.sections?.profile || 0}%</b>
+            </div>
+            <div>
+              <span>Alamat Lengkap:</span> <b>{completeness.sections?.address || 0}%</b>
+            </div>
+            <div>
+              <span>Orang Tua/Wali:</span> <b>{completeness.sections?.parents || 0}%</b>
+            </div>
+            <div>
+              <span>Dokumen Fisik:</span> <b>{completeness.sections?.documents || 0}%</b>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Tab Layout */}
+      <div className="st-detail-layout no-print">
+        {/* Sidebar Nav */}
         <aside className="st-detail-sidebar">
           <div className="st-detail-sidebar__head">
             <span
@@ -386,6 +707,133 @@ export function StudentDetailView({
                 <strong>Ringkasan Profil</strong>
                 <small>Overview status siswa</small>
               </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "biodata" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("biodata")}
+            >
+              <span className="st-detail-menu__icon">
+                <IdCard size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Biodata Lengkap</strong>
+                <small>Identitas & alamat domisili</small>
+              </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "akademik" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("akademik")}
+            >
+              <span className="st-detail-menu__icon">
+                <School size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Riwayat Akademik</strong>
+                <small>Registrasi & riwayat kelas</small>
+              </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "wali" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("wali")}
+            >
+              <span className="st-detail-menu__icon">
+                <UserCheck size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Data Orang Tua & Wali</strong>
+                <small>Ayah, Ibu & akun wali</small>
+              </span>
+              <span className="st-detail-menu__count">
+                {connectedGuardians.length}
+              </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "kesehatan" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("kesehatan")}
+            >
+              <span className="st-detail-menu__icon">
+                <HeartPulse size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Kesehatan & Fisik</strong>
+                <small>Golongan darah & pengukuran</small>
+              </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "bantuan" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("bantuan")}
+            >
+              <span className="st-detail-menu__icon">
+                <Award size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Bantuan Pendidikan</strong>
+                <small>KIP, PIP, PKH, Beasiswa</small>
+              </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "karakteristik" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("karakteristik")}
+            >
+              <span className="st-detail-menu__icon">
+                <BookOpen size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Karakteristik Santri</strong>
+                <small>Minat, bakat & kebiasaan</small>
+              </span>
+              <ChevronRight size={14} className="st-detail-menu__arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`st-detail-menu ${
+                activeTab === "dokumen" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("dokumen")}
+            >
+              <span className="st-detail-menu__icon">
+                <FolderOpen size={16} />
+              </span>
+              <span className="st-detail-menu__label">
+                <strong>Dokumen Persyaratan</strong>
+                <small>KK, Akta & berkas verifikasi</small>
+              </span>
+              {documents.length > 0 && (
+                <span className="st-detail-menu__count">
+                  {documents.length}
+                </span>
+              )}
               <ChevronRight size={14} className="st-detail-menu__arrow" />
             </button>
 
@@ -438,30 +886,12 @@ export function StudentDetailView({
               )}
               <ChevronRight size={14} className="st-detail-menu__arrow" />
             </button>
-
-            <button
-              type="button"
-              className={`st-detail-menu ${
-                activeTab === "wali" ? "is-active" : ""
-              }`}
-              onClick={() => setActiveTab("wali")}
-            >
-              <span className="st-detail-menu__icon">
-                <UserCheck size={16} />
-              </span>
-              <span className="st-detail-menu__label">
-                <strong>Data Wali Murid</strong>
-                <small>Kontak orang tua siswa</small>
-              </span>
-              <span className="st-detail-menu__count">
-                {connectedGuardians.length}
-              </span>
-              <ChevronRight size={14} className="st-detail-menu__arrow" />
-            </button>
           </nav>
         </aside>
 
+        {/* Tab Content Panels */}
         <section className="st-detail-content">
+          {/* TAB 1: RINGKASAN */}
           {activeTab === "ringkasan" && (
             <div className="st-tab-panel">
               <div className="st-section-card">
@@ -563,6 +993,7 @@ export function StudentDetailView({
                     </div>
                   </div>
 
+                  {/* Quick Wali Kontak */}
                   <div className="st-wali-section" style={{ marginTop: 20 }}>
                     <div className="st-wali-section__head">
                       <div>
@@ -666,6 +1097,838 @@ export function StudentDetailView({
             </div>
           )}
 
+          {/* TAB 2: BIODATA LENGKAP */}
+          {activeTab === "biodata" && (
+            <div className="st-tab-panel">
+              {/* Identitas Diri */}
+              <div className="st-section-card" style={{ marginBottom: 20 }}>
+                <div className="st-section-card__header">
+                  <IdCard size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Identitas Lengkap Siswa</h3>
+                    <small>Data nomor kependudukan, akta kelahiran, dan atribut personal</small>
+                  </div>
+                  {canMaster && (
+                    <button
+                      type="button"
+                      className="st-btn-secondary"
+                      onClick={onEdit}
+                      style={{ marginLeft: "auto", fontSize: 11 }}
+                    >
+                      <Pencil size={12} /> Ubah Biodata
+                    </button>
+                  )}
+                </div>
+                <div className="st-section-card__body">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                      gap: 16,
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nama Lengkap</span>
+                      <strong>{student.name}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nama Panggilan</span>
+                      <strong>{studentExtended.nickname || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nomor Induk Siswa (NIS)</span>
+                      <strong>{student.nis}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>NISN</span>
+                      <strong>{student.nisn || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>NIK Siswa</span>
+                      <strong>{maskNik(studentExtended.nik)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nomor Kartu Keluarga (KK)</span>
+                      <strong>{maskNik(studentExtended.familyCardNumber)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>No. Registrasi Akta Lahir</span>
+                      <strong>{studentExtended.birthCertificateNumber || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Tempat, Tanggal Lahir</span>
+                      <strong>
+                        {student.birthPlace || "—"}, {formatDateIndo(student.birthDate)} ({calculateAge(student.birthDate)})
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jenis Kelamin</span>
+                      <strong>{student.gender === "L" ? "Laki-laki" : student.gender === "P" ? "Perempuan" : "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Agama</span>
+                      <strong>{studentExtended.religion || "Islam"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kewarganegaraan</span>
+                      <strong>{studentExtended.citizenship || "WNI"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Anak Ke / Dari Bersaudara</span>
+                      <strong>
+                        Anak ke-{studentExtended.birthOrder || "—"} dari {studentExtended.siblingCount || "—"} bersaudara
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Bahasa Sehari-hari</span>
+                      <strong>{studentExtended.dailyLanguage || "Bahasa Indonesia"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Status Siswa</span>
+                      <span className="st-badge st-badge-green">{studentExtended.studentStatus || "AKTIF"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Alamat KK & Domisili */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                  gap: 20,
+                }}
+              >
+                <div className="st-section-card">
+                  <div className="st-section-card__header">
+                    <MapPin size={18} className="st-card-icon" />
+                    <div>
+                      <h3>Alamat Sesuai KK</h3>
+                      <small>Alamat resmi tertera pada dokumen Kartu Keluarga</small>
+                    </div>
+                  </div>
+                  <div className="st-section-card__body">
+                    {kkAddress ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div>
+                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jalan / Alamat</span>
+                          <strong>{kkAddress.street || "—"}</strong>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>RT / RW</span>
+                            <strong>RT {kkAddress.rt || "—"} / RW {kkAddress.rw || "—"}</strong>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Dusun / Kampung</span>
+                            <strong>{kkAddress.hamlet || "—"}</strong>
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kelurahan / Desa</span>
+                            <strong>{kkAddress.village || "—"}</strong>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kecamatan</span>
+                            <strong>{kkAddress.district || "—"}</strong>
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kabupaten / Kota</span>
+                            <strong>{kkAddress.city || "—"}</strong>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Provinsi</span>
+                            <strong>{kkAddress.province || "—"}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kode Pos</span>
+                          <strong>{kkAddress.postalCode || "—"}</strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--muted)", fontSize: 12 }}>Belum ada data alamat Kartu Keluarga.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="st-section-card">
+                  <div className="st-section-card__header">
+                    <MapPin size={18} className="st-card-icon" />
+                    <div>
+                      <h3>Alamat Domisili & Transportasi</h3>
+                      <small>Tempat tinggal saat ini serta akses menuju sekolah</small>
+                    </div>
+                  </div>
+                  <div className="st-section-card__body">
+                    {domAddress ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div>
+                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Status Tempat Tinggal</span>
+                          <strong>{domAddress.livingWith || "Bersama Orang Tua"}</strong>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Alamat Tinggal</span>
+                          <strong>{domAddress.street || "Sama dengan KK"}</strong>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jarak ke Sekolah</span>
+                            <strong>{domAddress.distanceKm ? `${domAddress.distanceKm} km` : "—"}</strong>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Waktu Tempuh</span>
+                            <strong>{domAddress.travelTimeMinutes ? `${domAddress.travelTimeMinutes} menit` : "—"}</strong>
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Moda Transportasi</span>
+                          <strong>{domAddress.transportMode || "Sepeda Motor / Antar Jemput"}</strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ color: "var(--muted)", fontSize: 12 }}>Belum ada data domisili.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: AKADEMIK */}
+          {activeTab === "akademik" && (
+            <div className="st-tab-panel">
+              <div className="st-section-card" style={{ marginBottom: 20 }}>
+                <div className="st-section-card__header">
+                  <School size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Data Riwayat Pendaftaran & Asal Sekolah</h3>
+                    <small>Informasi registrasi awal dan jenjang pendidikan sebelumnya</small>
+                  </div>
+                </div>
+                <div className="st-section-card__body">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                      gap: 16,
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nomor Registrasi / Pendaftaran</span>
+                      <strong>{enrollments[0]?.registrationNumber || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Tanggal Masuk / Terdaftar</span>
+                      <strong>{formatDateIndo(student.enrolledOn)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jenis Pendaftaran</span>
+                      <span className="st-pill-green">{enrollments[0]?.enrollmentType || "SISWA_BARU"}</span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Masuk di Tingkat / Kelas</span>
+                      <strong>Kelas {enrollments[0]?.entryGrade || "1"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Pernah PAUD / TK</span>
+                      <strong>{enrollments[0]?.hasAttendedPaud ? "Ya, Pernah" : "Tidak"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nama Sekolah Asal</span>
+                      <strong>{enrollments[0]?.previousSchoolName || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>NPSN Sekolah Asal</span>
+                      <strong>{enrollments[0]?.previousSchoolNpsn || "—"}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Riwayat Penempatan Kelas */}
+              <div className="st-section-card">
+                <div className="st-section-card__header">
+                  <CalendarDays size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Riwayat Penempatan Kelas & Tahun Ajaran</h3>
+                    <small>Catatan historis rombongan belajar yang pernah diikuti santri</small>
+                  </div>
+                </div>
+                <div className="st-section-card__body">
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Tahun Ajaran</th>
+                          <th>Kelas Belajar</th>
+                          <th>Tingkat</th>
+                          <th>Status Penempatan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>
+                            <strong>{studentYear ? studentYear.name : "TA 2026/2027"}</strong>
+                          </td>
+                          <td>
+                            <strong>{studentClass ? studentClass.name : "Belum Ditempatkan"}</strong>
+                          </td>
+                          <td>Tingkat {studentClass ? studentClass.name.split(" ")[0] : "—"}</td>
+                          <td>
+                            <span className="st-badge st-badge-green">Aktif Berjalan</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: ORANG TUA & WALI */}
+          {activeTab === "wali" && (
+            <div className="st-tab-panel">
+              {/* Family Members from Master */}
+              <div className="st-section-card" style={{ marginBottom: 20 }}>
+                <div className="st-section-card__header">
+                  <UserCheck size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Data Orang Tua & Wali Kandung (Master Keluarga)</h3>
+                    <small>Profil ayah, ibu, dan wali yang tercatat dalam berkas kependudukan</small>
+                  </div>
+                  {canMaster && (
+                    <button
+                      type="button"
+                      className="st-btn-secondary"
+                      onClick={onEdit}
+                      style={{ marginLeft: "auto", fontSize: 11 }}
+                    >
+                      <Pencil size={12} /> Kelola Data Keluarga
+                    </button>
+                  )}
+                </div>
+                <div className="st-section-card__body">
+                  {family.length === 0 ? (
+                    <p style={{ color: "var(--muted)", fontSize: 12 }}>
+                      Belum ada data anggota keluarga yang tercatat. Silakan lengkapi melalui formulir ubah data siswa.
+                    </p>
+                  ) : (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+                        gap: 16,
+                      }}
+                    >
+                      {family.map((item: any, idx: number) => {
+                        const m = item.member;
+                        const r = item.relation;
+                        const roleLabel =
+                          r.relationshipType === "FATHER"
+                            ? "Ayah Kandung"
+                            : r.relationshipType === "MOTHER"
+                            ? "Ibu Kandung"
+                            : "Wali Siswa";
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              border: "1px solid var(--border, #e2e8f0)",
+                              borderRadius: 10,
+                              padding: 16,
+                              background: "#f8fafc",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 12,
+                              }}
+                            >
+                              <strong style={{ fontSize: 13 }}>{roleLabel}</strong>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                {r.isPrimaryContact && (
+                                  <span className="st-badge st-badge-blue">Kontak Utama</span>
+                                )}
+                                {r.isPaymentResponsible && (
+                                  <span className="st-badge st-badge-green">PJ SPP</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
+                              <div>
+                                <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Nama Lengkap:</span>
+                                <strong>{m.fullName}</strong>
+                              </div>
+                              <div>
+                                <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>NIK:</span>
+                                <strong>{maskNik(m.nik)}</strong>
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                <div>
+                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Pendidikan:</span>
+                                  <span>{m.education || "—"}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Pekerjaan:</span>
+                                  <span>{m.occupation || "—"}</span>
+                                </div>
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                <div>
+                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Penghasilan:</span>
+                                  <span>{m.monthlyIncome || "—"}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Telepon/WA:</span>
+                                  <strong>{m.phone || "—"}</strong>
+                                </div>
+                              </div>
+                              {m.phone && (
+                                <a
+                                  href={whatsappUrl(m.phone)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="st-btn-whatsapp"
+                                  style={{ marginTop: 6, display: "inline-flex", width: "fit-content" }}
+                                >
+                                  <Phone size={12} /> Kirim WhatsApp
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Portal Guardians Account */}
+              <div className="st-section-card">
+                <div className="st-section-card__header">
+                  <UserPlus size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Akun Portal Wali Murid</h3>
+                    <small>Daftar wali murid yang memiliki otorisasi akses ke Portal Informasi Wali Murid</small>
+                  </div>
+                  {canMaster && (
+                    <button
+                      type="button"
+                      className="primary tiny"
+                      onClick={onConnectGuardian}
+                      style={{ marginLeft: "auto" }}
+                    >
+                      <Plus size={13} />
+                      Hubungkan Wali Baru
+                    </button>
+                  )}
+                </div>
+
+                <div className="st-section-card__body">
+                  {connectedGuardians.length === 0 ? (
+                    <div className="st-empty-state">
+                      <Users size={32} />
+                      <p>Siswa ini belum dihubungkan dengan data wali murid manapun.</p>
+                      {canMaster && (
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={onConnectGuardian}
+                          style={{ marginTop: 10 }}
+                        >
+                          <Plus size={14} /> Hubungkan Wali Murid Sekarang
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="st-wali-grid">
+                      {connectedGuardians.map((g, idx) => (
+                        <div key={g.id} className="st-wali-card">
+                          <div className="st-wali-card__top">
+                            <div>
+                              <strong style={{ fontSize: 13, display: "block" }}>{g.name}</strong>
+                              <small style={{ color: "var(--muted)" }}>
+                                {idx === 0 ? "Kontak Wali Utama" : "Kontak Wali Kedua"}
+                              </small>
+                            </div>
+                            <span className="st-badge st-badge-slate">
+                              {g.userId ? "Akun Aktif" : "Tanpa Akun"}
+                            </span>
+                          </div>
+
+                          <div className="st-wali-card__body">
+                            <div className="st-wali-card__row">
+                              <Phone size={13} />
+                              <strong>{g.phone}</strong>
+                            </div>
+
+                            <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                              <a
+                                href={whatsappUrl(g.phone)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="st-btn-whatsapp"
+                              >
+                                <Phone size={12} /> Chat WhatsApp
+                              </a>
+                              {canMaster && (
+                                <button
+                                  type="button"
+                                  className="st-btn-disconnect"
+                                  onClick={() => onDisconnectGuardian(g.id)}
+                                >
+                                  Lepas Akses
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: KESEHATAN */}
+          {activeTab === "kesehatan" && (
+            <div className="st-tab-panel">
+              {/* Profil Medis */}
+              <div className="st-section-card" style={{ marginBottom: 20 }}>
+                <div className="st-section-card__header">
+                  <HeartPulse size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Profil Medis & Kebutuhan Khusus</h3>
+                    <small>Catatan riwayat kesehatan umum, alergi, dan kebutuhan khusus santri</small>
+                  </div>
+                  {canMaster && (
+                    <button
+                      type="button"
+                      className="st-btn-secondary"
+                      onClick={onEdit}
+                      style={{ marginLeft: "auto", fontSize: 11 }}
+                    >
+                      <Pencil size={12} /> Ubah Profil Kesehatan
+                    </button>
+                  )}
+                </div>
+                <div className="st-section-card__body">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                      gap: 16,
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Golongan Darah</span>
+                      <strong style={{ fontSize: 16 }}>{health?.bloodType || "Tidak Diketahui"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Tinggi & Berat Saat Masuk</span>
+                      <strong>
+                        {health?.heightCm ? `${health.heightCm} cm` : "—"} /{" "}
+                        {health?.weightKg ? `${health.weightKg} kg` : "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Riwayat Penyakit</span>
+                      <strong>{health?.medicalHistory || "Tidak Ada"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Alergi Makanan / Obat</span>
+                      <strong>{health?.allergies || "Tidak Ada Alergi"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kebutuhan Khusus (Disabilitas)</span>
+                      <strong>{health?.specialNeeds || "Tidak Ada"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Catatan Darurat / UKS</span>
+                      <strong>{health?.emergencyNotes || "—"}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pengukuran Fisik Periodik */}
+              <div className="st-section-card">
+                <div className="st-section-card__header">
+                  <Activity size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Riwayat Pengukuran Fisik Periodik</h3>
+                    <small>Data perkembangan tinggi badan, berat badan, dan lingkar kepala tiap semester</small>
+                  </div>
+                  {canMaster && (
+                    <button
+                      type="button"
+                      className="primary tiny"
+                      onClick={() => setShowAddMeasurementModal(true)}
+                      style={{ marginLeft: "auto" }}
+                    >
+                      <Plus size={13} /> Tambah Pengukuran
+                    </button>
+                  )}
+                </div>
+                <div className="st-section-card__body">
+                  {measurements.length === 0 ? (
+                    <p style={{ color: "var(--muted)", fontSize: 12 }}>
+                      Belum ada riwayat pengukuran fisik periodik untuk santri ini.
+                    </p>
+                  ) : (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Tanggal Ukur</th>
+                            <th>Semester</th>
+                            <th>Tinggi Badan</th>
+                            <th>Berat Badan</th>
+                            <th>Lingkar Kepala</th>
+                            <th>Catatan</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {measurements.map((m: any) => (
+                            <tr key={m.id}>
+                              <td>
+                                <strong>{formatDateIndo(m.measuredAt)}</strong>
+                              </td>
+                              <td>
+                                <span className="st-pill-green">
+                                  {m.semester === "SEMESTER_1" ? "Semester Ganjil" : "Semester Genap"}
+                                </span>
+                              </td>
+                              <td>{m.heightCm} cm</td>
+                              <td>{m.weightKg} kg</td>
+                              <td>{m.headCircumferenceCm ? `${m.headCircumferenceCm} cm` : "—"}</td>
+                              <td>{m.notes || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: BANTUAN PENDIDIKAN */}
+          {activeTab === "bantuan" && (
+            <div className="st-tab-panel">
+              <div className="st-section-card">
+                <div className="st-section-card__header">
+                  <Award size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Riwayat Bantuan Pendidikan (KIP, PIP, PKH, Beasiswa)</h3>
+                    <small>Data jaminan sosial pendidikan dan program afirmasi yang diterima siswa</small>
+                  </div>
+                  {canMaster && (
+                    <button
+                      type="button"
+                      className="primary tiny"
+                      onClick={() => setShowAddAidModal(true)}
+                      style={{ marginLeft: "auto" }}
+                    >
+                      <Plus size={13} /> Tambah Bantuan
+                    </button>
+                  )}
+                </div>
+                <div className="st-section-card__body">
+                  {aidRecords.length === 0 ? (
+                    <p style={{ color: "var(--muted)", fontSize: 12 }}>
+                      Belum ada data bantuan pendidikan atau beasiswa yang terdaftar.
+                    </p>
+                  ) : (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Jenis Program</th>
+                            <th>Nama Program</th>
+                            <th>Tahun</th>
+                            <th>Nominal</th>
+                            <th>Status Bantuan</th>
+                            <th>Catatan</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aidRecords.map((a: any) => (
+                            <tr key={a.id}>
+                              <td>
+                                <strong>{a.aidType}</strong>
+                              </td>
+                              <td>{a.programName || a.aidType}</td>
+                              <td>{a.year}</td>
+                              <td>{a.amount ? money(a.amount) : "—"}</td>
+                              <td>
+                                <span
+                                  className={`st-badge ${
+                                    a.status === "ACTIVE" ? "st-badge-green" : "st-badge-slate"
+                                  }`}
+                                >
+                                  {a.status === "ACTIVE" ? "Aktif Menerima" : a.status}
+                                </span>
+                              </td>
+                              <td>{a.notes || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: KARAKTERISTIK SANTRI */}
+          {activeTab === "karakteristik" && (
+            <div className="st-tab-panel">
+              <div className="st-section-card">
+                <div className="st-section-card__header">
+                  <BookOpen size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Karakteristik & Perkembangan Santri</h3>
+                    <small>Profil minat bakat, kebiasaan belajar, dan catatan pembinaan akhlak</small>
+                  </div>
+                </div>
+                <div className="st-section-card__body">
+                  <div
+                    style={{
+                      background: "#f8fafc",
+                      border: "1px dashed var(--border, #cbd5e1)",
+                      borderRadius: 10,
+                      padding: 24,
+                      textAlign: "center",
+                    }}
+                  >
+                    <BookOpen size={32} style={{ margin: "0 auto 10px", color: "var(--primary)" }} />
+                    <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>Lembar Karakteristik Santri</h4>
+                    <p style={{ margin: "0 auto 16px", maxWidth: 480, fontSize: 12, color: "var(--muted)" }}>
+                      Modul pemetaan karakteristik meliputi minat bakat seni/olahraga/tahfidz, kemandirian santri,
+                      dan catatan bimbingan konseling terintegrasi dengan rapor karakter SDIT AT-TAQWIM.
+                    </p>
+                    <span className="st-badge st-badge-green">Aktif Terhubung ke Rapor Santri</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: DOKUMEN PERSYARATAN */}
+          {activeTab === "dokumen" && (
+            <div className="st-tab-panel">
+              <div className="st-section-card">
+                <div className="st-section-card__header">
+                  <FolderOpen size={18} className="st-card-icon" />
+                  <div>
+                    <h3>Dokumen Fisik & Berkas Persyaratan Siswa</h3>
+                    <small>Berkas pendaftaran, verifikasi keabsahan dokumen kependudukan oleh TU</small>
+                  </div>
+                </div>
+                <div className="st-section-card__body">
+                  {documents.length === 0 ? (
+                    <div className="st-empty-state">
+                      <FolderOpen size={32} />
+                      <p>Belum ada berkas dokumen persyaratan yang diunggah untuk siswa ini.</p>
+                      {canMaster && (
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={onEdit}
+                          style={{ marginTop: 10 }}
+                        >
+                          <Pencil size={14} /> Buka Form untuk Unggah Berkas
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Jenis Dokumen</th>
+                            <th>Nama File</th>
+                            <th>Ukuran</th>
+                            <th>Status Verifikasi</th>
+                            <th>Catatan TU</th>
+                            <th className="right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {documents.map((doc: any) => (
+                            <tr key={doc.id}>
+                              <td>
+                                <strong>{doc.documentType}</strong>
+                              </td>
+                              <td>{doc.fileName}</td>
+                              <td>
+                                {doc.fileSize ? `${Math.round(doc.fileSize / 1024)} KB` : "—"}
+                              </td>
+                              <td>
+                                <span
+                                  className={`st-badge ${
+                                    doc.verificationStatus === "VERIFIED"
+                                      ? "st-badge-green"
+                                      : doc.verificationStatus === "REJECTED"
+                                      ? "st-badge-amber"
+                                      : "st-badge-slate"
+                                  }`}
+                                >
+                                  {doc.verificationStatus}
+                                </span>
+                              </td>
+                              <td>{doc.verificationNotes || "—"}</td>
+                              <td className="right">
+                                <div style={{ display: "inline-flex", gap: 6 }}>
+                                  <a
+                                    href={`/api/student-documents/${doc.id}/download`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="st-btn-secondary"
+                                    style={{ padding: "4px 8px", fontSize: 11 }}
+                                  >
+                                    <Download size={12} /> Unduh
+                                  </a>
+                                  {canMaster && (
+                                    <button
+                                      type="button"
+                                      className="outline tiny"
+                                      onClick={() => {
+                                        setDocReviewModal(doc);
+                                        setReviewStatus(doc.verificationStatus || "VERIFIED");
+                                        setReviewNotes(doc.verificationNotes || "");
+                                      }}
+                                    >
+                                      <FileCheck size={12} /> Review
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 9: KEUANGAN (EXISTING FEATURE KEPT INTACT) */}
           {activeTab === "keuangan" && (
             <div className="st-tab-panel">
               <div className="st-section-card">
@@ -726,9 +1989,7 @@ export function StudentDetailView({
                   {studentInvoices.length === 0 ? (
                     <div className="st-empty-state">
                       <ReceiptText size={24} />
-                      <p>
-                        Belum ada invoice SPP yang diterbitkan untuk siswa ini.
-                      </p>
+                      <p>Belum ada invoice SPP yang diterbitkan untuk siswa ini.</p>
                     </div>
                   ) : (
                     <div className="table-scroll">
@@ -834,6 +2095,7 @@ export function StudentDetailView({
             </div>
           )}
 
+          {/* TAB 10: UJIAN (EXISTING FEATURE KEPT INTACT) */}
           {activeTab === "ujian" && (
             <div className="st-tab-panel">
               <div className="st-section-card">
@@ -959,109 +2221,515 @@ export function StudentDetailView({
               </div>
             </div>
           )}
+        </section>
+      </div>
 
-          {activeTab === "wali" && (
-            <div className="st-tab-panel">
-              <div className="st-section-card">
-                <div className="st-section-card__header">
-                  <UserCheck size={18} className="st-card-icon" />
-                  <div>
-                    <h3>Data Orang Tua / Wali Murid Terhubung</h3>
-                    <small>
-                      Daftar kontak keluarga dan akses ke Portal Wali Murid
-                    </small>
-                  </div>
-                  {canMaster && (
-                    <button
-                      type="button"
-                      className="primary tiny"
-                      onClick={onConnectGuardian}
-                      style={{ marginLeft: "auto" }}
-                    >
-                      <Plus size={13} />
-                      Hubungkan Wali Baru
-                    </button>
-                  )}
+      {/* MODAL: Tambah Pengukuran Fisik */}
+      {showAddMeasurementModal && (
+        <Modal
+          title="Tambah Pengukuran Fisik Periodik"
+          close={() => setShowAddMeasurementModal(false)}
+        >
+          <form onSubmit={handleSaveMeasurement} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Tanggal Pengukuran *
+              </label>
+              <input
+                type="date"
+                required
+                value={measurementForm.date}
+                onChange={(e) => setMeasurementForm({ ...measurementForm, date: e.target.value })}
+                className="st-input"
+              />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                  Tinggi Badan (cm) *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  placeholder="Contoh: 125.5"
+                  value={measurementForm.heightCm}
+                  onChange={(e) => setMeasurementForm({ ...measurementForm, heightCm: e.target.value })}
+                  className="st-input"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                  Berat Badan (kg) *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  placeholder="Contoh: 26.0"
+                  value={measurementForm.weightKg}
+                  onChange={(e) => setMeasurementForm({ ...measurementForm, weightKg: e.target.value })}
+                  className="st-input"
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Lingkar Kepala (cm)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Contoh: 51.0 (opsional)"
+                value={measurementForm.headCircumferenceCm}
+                onChange={(e) => setMeasurementForm({ ...measurementForm, headCircumferenceCm: e.target.value })}
+                className="st-input"
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Periode Semester *
+              </label>
+              <select
+                value={measurementForm.semester}
+                onChange={(e) => setMeasurementForm({ ...measurementForm, semester: e.target.value })}
+                className="st-input"
+              >
+                <option value="SEMESTER_1">Semester 1 (Ganjil)</option>
+                <option value="SEMESTER_2">Semester 2 (Genap)</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Catatan Tambahan
+              </label>
+              <input
+                type="text"
+                placeholder="Catatan kesehatan UKS"
+                value={measurementForm.notes}
+                onChange={(e) => setMeasurementForm({ ...measurementForm, notes: e.target.value })}
+                className="st-input"
+              />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setShowAddMeasurementModal(false)}
+              >
+                Batal
+              </button>
+              <button type="submit" className="primary" disabled={isSavingMeasurement}>
+                {isSavingMeasurement ? "Menyimpan..." : "Simpan Pengukuran"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL: Tambah Bantuan Pendidikan */}
+      {showAddAidModal && (
+        <Modal
+          title="Tambah Catatan Bantuan Pendidikan"
+          close={() => setShowAddAidModal(false)}
+        >
+          <form onSubmit={handleSaveAid} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Jenis Bantuan *
+              </label>
+              <select
+                value={aidForm.aidType}
+                onChange={(e) => setAidForm({ ...aidForm, aidType: e.target.value })}
+                className="st-input"
+              >
+                <option value="PIP">Program Indonesia Pintar (PIP)</option>
+                <option value="KIP">Kartu Indonesia Pintar (KIP)</option>
+                <option value="PKH">Program Keluarga Harapan (PKH)</option>
+                <option value="BEASISWA_INTERNAL">Beasiswa Yayasan SDIT At-Taqwim</option>
+                <option value="BEASISWA_LAIN">Beasiswa Lainnya</option>
+              </select>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                  Nama Program / Beasiswa
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: PIP Fase A Kelas 1"
+                  value={aidForm.programName}
+                  onChange={(e) => setAidForm({ ...aidForm, programName: e.target.value })}
+                  className="st-input"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                  Tahun Anggaran *
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={aidForm.year}
+                  onChange={(e) => setAidForm({ ...aidForm, year: e.target.value })}
+                  className="st-input"
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Nominal Bantuan (Rp)
+              </label>
+              <input
+                type="number"
+                placeholder="Contoh: 450000"
+                value={aidForm.amount}
+                onChange={(e) => setAidForm({ ...aidForm, amount: e.target.value })}
+                className="st-input"
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Catatan / Keterangan
+              </label>
+              <input
+                type="text"
+                placeholder="Nomor kartu KIP / rekening penyalur"
+                value={aidForm.notes}
+                onChange={(e) => setAidForm({ ...aidForm, notes: e.target.value })}
+                className="st-input"
+              />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setShowAddAidModal(false)}
+              >
+                Batal
+              </button>
+              <button type="submit" className="primary" disabled={isSavingAid}>
+                {isSavingAid ? "Menyimpan..." : "Simpan Bantuan"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL: Review / Verifikasi Dokumen oleh TU */}
+      {docReviewModal && (
+        <Modal
+          title={`Verifikasi Dokumen: ${docReviewModal.documentType}`}
+          close={() => setDocReviewModal(null)}
+        >
+          <form onSubmit={handleReviewDoc} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <p style={{ fontSize: 12, color: "#475569", margin: "0 0 10px" }}>
+                Nama Berkas: <b>{docReviewModal.fileName}</b>
+              </p>
+              <a
+                href={`/api/student-documents/${docReviewModal.id}/download`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="st-btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, marginBottom: 12 }}
+              >
+                <Download size={13} /> Buka / Unduh Berkas untuk Diperiksa
+              </a>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Hasil Pemeriksaan Berkas *
+              </label>
+              <select
+                value={reviewStatus}
+                onChange={(e) => setReviewStatus(e.target.value as any)}
+                className="st-input"
+              >
+                <option value="VERIFIED">Valid / Sesuai (VERIFIED)</option>
+                <option value="REJECTED">Ditolak / Berkas Buram / Salah (REJECTED)</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                Catatan Verifikasi Tata Usaha
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Contoh: Dokumen jelas dan sesuai dengan Kartu Keluarga asli."
+                value={reviewNotes}
+                onChange={(e) => setReviewNotes(e.target.value)}
+                className="st-input"
+              />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setDocReviewModal(null)}
+              >
+                Tutup
+              </button>
+              <button type="submit" className="primary" disabled={isSavingReview}>
+                {isSavingReview ? "Menyimpan..." : "Simpan Status Verifikasi"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL PRINT: Formulir Biodata A4 */}
+      {showPrintBiodataModal && (
+        <Modal
+          title="Pratinjau Formulir Biodata Siswa (A4)"
+          close={() => setShowPrintBiodataModal(false)}
+        >
+          <div style={{ maxHeight: "75vh", overflowY: "auto", padding: 10 }}>
+            <div
+              id="printable-form"
+              style={{
+                fontFamily: "serif",
+                color: "#111827",
+                background: "#ffffff",
+                padding: "24px 30px",
+                border: "1px solid #cbd5e1",
+              }}
+            >
+              {/* Kop Surat Resmi */}
+              <div
+                style={{
+                  textAlign: "center",
+                  borderBottom: "3px double #000000",
+                  paddingBottom: 10,
+                  marginBottom: 16,
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: "bold", textTransform: "uppercase" }}>
+                  SDIT AT-TAQWIM
+                </h2>
+                <p style={{ margin: "2px 0", fontSize: 11 }}>
+                  Jl. Raya Cileungsi - Setu, Pasirangin, Kec. Cileungsi, Kab. Bogor, Jawa Barat 16820
+                </p>
+                <p style={{ margin: 0, fontSize: 11, fontStyle: "italic" }}>
+                  Email: info@sdit-attaqwim.sch.id | NPSN: 69949182
+                </p>
+              </div>
+
+              <h3
+                style={{
+                  textAlign: "center",
+                  fontSize: 14,
+                  textDecoration: "underline",
+                  margin: "10px 0 16px",
+                  fontWeight: "bold",
+                }}
+              >
+                LEMBAR BIODATA RESMI PESERTA DIDIK
+              </h3>
+
+              {/* Data Section */}
+              <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", marginBottom: 16 }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: "30%", padding: "4px 0", verticalAlign: "top" }}>Nama Lengkap Peserta Didik</td>
+                    <td style={{ width: "3%", padding: "4px 0", verticalAlign: "top" }}>:</td>
+                    <td style={{ fontWeight: "bold", padding: "4px 0" }}>{student.name}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>NIS / NISN</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>{student.nis} / {student.nisn || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>Nomor Induk Kependudukan (NIK)</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>{studentExtended.nik || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>Nomor Kartu Keluarga (KK)</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>{studentExtended.familyCardNumber || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>Tempat, Tanggal Lahir</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>{student.birthPlace || "—"}, {formatDateIndo(student.birthDate)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>Jenis Kelamin / Agama</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>{student.gender === "L" ? "Laki-laki" : "Perempuan"} / {studentExtended.religion || "Islam"}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>Anak Ke / Saudara</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>Anak ke-{studentExtended.birthOrder || "—"} dari {studentExtended.siblingCount || "—"} bersaudara</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0", verticalAlign: "top" }}>Alamat Lengkap KK</td>
+                    <td style={{ padding: "4px 0", verticalAlign: "top" }}>:</td>
+                    <td>
+                      {kkAddress ? `${kkAddress.street || ""}, RT ${kkAddress.rt || "—"}/RW ${kkAddress.rw || "—"}, Desa ${kkAddress.village || "—"}, Kec. ${kkAddress.district || "—"}, ${kkAddress.city || "—"}` : "—"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: "4px 0" }}>Kelas Belajar</td>
+                    <td style={{ padding: "4px 0" }}>:</td>
+                    <td>{studentClass ? studentClass.name : "—"} ({studentYear ? studentYear.name : "TA 2026/2027"})</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Tanda Tangan */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: 30,
+                  fontSize: 11,
+                  textAlign: "center",
+                }}
+              >
+                <div>
+                  <p style={{ margin: "0 0 50px" }}>Mengetahui,<br />Orang Tua / Wali Santri</p>
+                  <p style={{ margin: 0, fontWeight: "bold", textDecoration: "underline" }}>( .................................................... )</p>
                 </div>
-
-                <div className="st-section-card__body">
-                  {connectedGuardians.length === 0 ? (
-                    <div className="st-empty-state">
-                      <Users size={32} />
-                      <p>
-                        Siswa ini belum dihubungkan dengan data wali murid manapun.
-                      </p>
-                      {canMaster && (
-                        <button
-                          type="button"
-                          className="primary"
-                          onClick={onConnectGuardian}
-                          style={{ marginTop: 10 }}
-                        >
-                          <Plus size={14} />
-                          Hubungkan Wali Murid Sekarang
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="st-wali-grid">
-                      {connectedGuardians.map((g, idx) => (
-                        <div key={g.id} className="st-wali-card">
-                          <div className="st-wali-card__top">
-                            <div>
-                              <strong style={{ fontSize: 13, display: "block" }}>
-                                {g.name}
-                              </strong>
-                              <small style={{ color: "var(--muted)" }}>
-                                {idx === 0
-                                  ? "Kontak Wali Utama"
-                                  : "Kontak Wali Kedua"}
-                              </small>
-                            </div>
-                            <span className="st-badge st-badge-slate">
-                              {g.userId ? "Akun Aktif" : "Tanpa Akun"}
-                            </span>
-                          </div>
-
-                          <div className="st-wali-card__body">
-                            <div className="st-wali-card__row">
-                              <Phone size={13} />
-                              <strong>{g.phone}</strong>
-                            </div>
-
-                            <div
-                              style={{ marginTop: 12, display: "flex", gap: 8 }}
-                            >
-                              <a
-                                href={whatsappUrl(g.phone)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="st-btn-whatsapp"
-                              >
-                                <Phone size={12} />
-                                Chat WhatsApp
-                              </a>
-                              {canMaster && (
-                                <button
-                                  type="button"
-                                  className="st-btn-disconnect"
-                                  onClick={() => onDisconnectGuardian(g.id)}
-                                >
-                                  Lepas Akses
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div>
+                  <p style={{ margin: "0 0 50px" }}>Bogor, {formatDateIndo(new Date().toISOString())}<br />Petugas Tata Usaha</p>
+                  <p style={{ margin: 0, fontWeight: "bold", textDecoration: "underline" }}>( Tata Usaha SDIT At-Taqwim )</p>
                 </div>
               </div>
             </div>
-          )}
-        </section>
-      </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setShowPrintBiodataModal(false)}
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => window.print()}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <Printer size={14} /> Cetak Formulir (Ctrl+P)
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL PRINT: Ringkasan Buku Induk */}
+      {showPrintBukuIndukModal && (
+        <Modal
+          title="Pratinjau Lembar Buku Induk Siswa"
+          close={() => setShowPrintBukuIndukModal(false)}
+        >
+          <div style={{ maxHeight: "75vh", overflowY: "auto", padding: 10 }}>
+            <div
+              id="printable-form"
+              style={{
+                fontFamily: "serif",
+                color: "#111827",
+                background: "#ffffff",
+                padding: "24px 30px",
+                border: "1px solid #cbd5e1",
+              }}
+            >
+              <div
+                style={{
+                  textAlign: "center",
+                  borderBottom: "2px solid #000000",
+                  paddingBottom: 8,
+                  marginBottom: 16,
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 16, textTransform: "uppercase" }}>
+                  BUKU INDUK PESERTA DIDIK
+                </h2>
+                <h3 style={{ margin: "2px 0 0", fontSize: 13 }}>
+                  SEKOLAH DASAR ISLAM TERPADU AT-TAQWIM
+                </h3>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: 11 }}>
+                <span>NOMOR INDUK SISWA: <b>{student.nis}</b></span>
+                <span>NISN: <b>{student.nisn || "—"}</b></span>
+              </div>
+
+              <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ width: "35%", padding: "5px 0" }}>1. Nama Lengkap</td>
+                    <td style={{ fontWeight: "bold" }}>: {student.name}</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 0" }}>2. Tempat, Tanggal Lahir</td>
+                    <td>: {student.birthPlace || "—"}, {formatDateIndo(student.birthDate)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 0" }}>3. NIK / No. Akta Kelahiran</td>
+                    <td>: {studentExtended.nik || "—"} / {studentExtended.birthCertificateNumber || "—"}</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 0" }}>4. Tanggal Terdaftar Masuk</td>
+                    <td>: {formatDateIndo(student.enrolledOn)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 0" }}>5. Sekolah Asal / TK</td>
+                    <td>: {enrollments[0]?.previousSchoolName || "—"}</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 0" }}>6. Golongan Darah</td>
+                    <td>: {health?.bloodType || "—"}</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "5px 0" }}>7. Status Terakhir</td>
+                    <td>: {student.active ? "AKTIF" : "TIDAK AKTIF"}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  marginTop: 35,
+                  fontSize: 11,
+                  textAlign: "center",
+                }}
+              >
+                <div>
+                  <p style={{ margin: "0 0 50px" }}>Kepala SDIT At-Taqwim,</p>
+                  <p style={{ margin: 0, fontWeight: "bold", textDecoration: "underline" }}>( H. Ahmad Fauzi, S.Pd.I )</p>
+                  <p style={{ margin: 0 }}>NIP/NIY: 198204152008011002</p>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setShowPrintBukuIndukModal(false)}
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => window.print()}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <Printer size={14} /> Cetak Buku Induk (Ctrl+P)
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

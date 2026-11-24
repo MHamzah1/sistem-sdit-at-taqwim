@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,7 +13,18 @@ import {
   Trash2,
   Wallet,
   MessageSquare,
-  Copy,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  FileText,
+  RefreshCw,
+  X,
+  FileCheck,
+  ChevronRight,
+  ArrowRight,
   Check,
 } from "lucide-react";
 import { useApp } from "@/src/lib/context/AppContext";
@@ -26,8 +37,21 @@ import {
 } from "@/src/components/modals";
 import { api } from "@/src/lib/api";
 import type { AppState } from "@/server/state";
+import { formatDateIndo } from "@/src/lib/formatters";
 
 type Student = AppState["students"][number];
+
+function estimateCompleteness(s: Student): number {
+  let score = 0;
+  const total = 6;
+  if (s.name) score++;
+  if (s.nis) score++;
+  if (s.gender) score++;
+  if (s.birthPlace) score++;
+  if (s.birthDate) score++;
+  if (s.classId) score++;
+  return Math.round((score / total) * 100);
+}
 
 export default function MasterSiswaPage() {
   const router = useRouter();
@@ -36,8 +60,35 @@ export default function MasterSiswaPage() {
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ACTIVE");
+  const [completenessFilter, setCompletenessFilter] = useState<"ALL" | "COMPLETE" | "INCOMPLETE">("ALL");
 
-  // Modals state
+  // Drafts state
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [showDraftsModal, setShowDraftsModal] = useState(false);
+
+  // Change requests state
+  const [changeRequests, setChangeRequests] = useState<any[]>([]);
+  const [showChangeRequestsModal, setShowChangeRequestsModal] = useState(false);
+  const [reviewingReqId, setReviewingReqId] = useState<string | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+
+  // Import wizard state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
+
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportScope, setExportScope] = useState<"FILTERED" | "ALL">("FILTERED");
+  const [exportCols, setExportCols] = useState({
+    identity: true,
+    academic: true,
+    parents: true,
+  });
+
+  // Action modals
   const [paymentStudentId, setPaymentStudentId] = useState<string | null>(null);
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
@@ -45,6 +96,24 @@ export default function MasterSiswaPage() {
   const students = state?.students || [];
   const classes = state?.classes || [];
   const academicYears = state?.academicYears || [];
+
+  // Fetch drafts & change requests on mount
+  useEffect(() => {
+    fetch("/api/student-drafts")
+      .then((res) => (res.ok ? res.json() : { drafts: [] }))
+      .then((data) => setDrafts(data.drafts || []))
+      .catch(() => {});
+
+    fetch("/api/student-profile-change-requests")
+      .then((res) => (res.ok ? res.json() : { requests: [] }))
+      .then((data) => setChangeRequests(data.requests || []))
+      .catch(() => {});
+  }, []);
+
+  const pendingRequests = useMemo(
+    () => changeRequests.filter((r) => r.status === "SUBMITTED"),
+    [changeRequests],
+  );
 
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
@@ -55,6 +124,11 @@ export default function MasterSiswaPage() {
       // Filter by status
       if (statusFilter === "ACTIVE" && !s.active) return false;
       if (statusFilter === "INACTIVE" && s.active) return false;
+
+      // Filter by completeness
+      const comp = estimateCompleteness(s);
+      if (completenessFilter === "COMPLETE" && comp < 80) return false;
+      if (completenessFilter === "INCOMPLETE" && comp >= 80) return false;
 
       // Filter by search
       if (search.trim()) {
@@ -67,7 +141,7 @@ export default function MasterSiswaPage() {
 
       return true;
     });
-  }, [students, selectedClass, statusFilter, search]);
+  }, [students, selectedClass, statusFilter, completenessFilter, search]);
 
   const handleDelete = async () => {
     if (!studentToDelete) return;
@@ -78,6 +152,40 @@ export default function MasterSiswaPage() {
     setStudentToDelete(null);
   };
 
+  const handleDeleteDraft = async (id: string) => {
+    if (!confirm("Hapus draf pendaftaran ini?")) return;
+    try {
+      const res = await fetch(`/api/student-drafts/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setDrafts((prev) => prev.filter((d) => d.id !== id));
+      }
+    } catch (e) {
+      alert("Gagal menghapus draf");
+    }
+  };
+
+  const handleReviewChangeRequest = async (id: string, status: "APPROVED" | "REJECTED") => {
+    try {
+      const res = await fetch(`/api/student-profile-change-requests/${id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reviewNotes }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Gagal memproses review.");
+      }
+      setChangeRequests((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status, reviewNotes } : r)),
+      );
+      setReviewingReqId(null);
+      setReviewNotes("");
+      alert(`Pengajuan berhasil di-${status === "APPROVED" ? "setujui" : "tolak"}`);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const activeCount = useMemo(
     () => students.filter((s) => s.active).length,
     [students],
@@ -86,6 +194,162 @@ export default function MasterSiswaPage() {
     () => students.filter((s) => !s.active).length,
     [students],
   );
+  const completeCount = useMemo(
+    () => students.filter((s) => estimateCompleteness(s) >= 80).length,
+    [students],
+  );
+  const incompleteCount = useMemo(
+    () => students.length - completeCount,
+    [students, completeCount],
+  );
+
+  // CSV Export handler
+  const handleExportCsv = () => {
+    const listToExport = exportScope === "FILTERED" ? filteredStudents : students;
+    const headers: string[] = [];
+    if (exportCols.identity) {
+      headers.push("NIS", "NISN", "NAMA_LENGKAP", "JENIS_KELAMIN", "TEMPAT_LAHIR", "TANGGAL_LAHIR");
+    }
+    if (exportCols.academic) {
+      headers.push("KELAS", "STATUS_SISWA");
+    }
+
+    const sanitizeCell = (val: string) => {
+      let clean = String(val || "").trim();
+      // Formula injection guard
+      if (["=", "+", "-", "@"].includes(clean.charAt(0))) {
+        clean = `'${clean}`;
+      }
+      if (clean.includes(",") || clean.includes('"') || clean.includes("\n")) {
+        clean = `"${clean.replace(/"/g, '""')}"`;
+      }
+      return clean;
+    };
+
+    const rows = listToExport.map((s) => {
+      const row: string[] = [];
+      const classItem = classes.find((c) => c.id === s.classId);
+      if (exportCols.identity) {
+        row.push(
+          sanitizeCell(s.nis),
+          sanitizeCell(s.nisn || ""),
+          sanitizeCell(s.name),
+          sanitizeCell(s.gender || ""),
+          sanitizeCell(s.birthPlace || ""),
+          sanitizeCell(s.birthDate || ""),
+        );
+      }
+      if (exportCols.academic) {
+        row.push(
+          sanitizeCell(classItem?.name || "Belum ada kelas"),
+          sanitizeCell(s.active ? "Aktif" : "Non-Aktif"),
+        );
+      }
+      return row.join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Data_Siswa_SDIT_At_Taqwim_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportModal(false);
+  };
+
+  // Download Sample Template CSV
+  const handleDownloadTemplate = () => {
+    const templateHeaders = [
+      "NIS",
+      "NISN",
+      "NAMA_LENGKAP",
+      "JENIS_KELAMIN",
+      "TEMPAT_LAHIR",
+      "TANGGAL_LAHIR",
+      "KELAS",
+      "NAMA_AYAH",
+      "NAMA_IBU",
+      "NO_HP_WALI",
+      "ALAMAT",
+    ];
+    const sampleRow = [
+      "262701099",
+      "0158912345",
+      "Ahmad Fauzan Al-Baqir",
+      "L",
+      "Bogor",
+      "2018-05-14",
+      "1-A Abu Bakar",
+      "Muhammad Ridwan",
+      "Siti Nurhaliza",
+      "081234567890",
+      "Jl. Pasirangin No. 12 RT 02/03",
+    ];
+    const csv = "\uFEFF" + [templateHeaders.join(","), sampleRow.join(",")].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Template_Import_Siswa_SDIT_At_Taqwim.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import File Parser
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length < 2) {
+        setImportErrors(["Berkas CSV kosong atau tidak memiliki baris data."]);
+        return;
+      }
+
+      const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim().toUpperCase());
+      const parsedRows: any[] = [];
+      const errors: string[] = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(",").map((v) => v.replace(/^"|"$/g, "").trim());
+        const rowData: Record<string, string> = {};
+        headers.forEach((h, idx) => {
+          rowData[h] = values[idx] || "";
+        });
+
+        // Basic validation
+        const nis = rowData["NIS"] || rowData["NO_INDUK"] || "";
+        const name = rowData["NAMA_LENGKAP"] || rowData["NAMA"] || "";
+        if (!nis) {
+          errors.push(`Baris ${i + 1}: NIS wajib diisi.`);
+        }
+        if (!name) {
+          errors.push(`Baris ${i + 1}: Nama Siswa wajib diisi.`);
+        }
+
+        parsedRows.push({
+          rowNum: i + 1,
+          nis,
+          name,
+          gender: rowData["JENIS_KELAMIN"] || "L",
+          birthPlace: rowData["TEMPAT_LAHIR"] || "",
+          birthDate: rowData["TANGGAL_LAHIR"] || "",
+          className: rowData["KELAS"] || "",
+          isValid: !errors.some((e) => e.startsWith(`Baris ${i + 1}`)),
+        });
+      }
+
+      setImportRows(parsedRows);
+      setImportErrors(errors);
+      setImportStep(3);
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <div className="st-page-shell">
@@ -101,24 +365,246 @@ export default function MasterSiswaPage() {
               <span>/</span>
               <span>Data Siswa</span>
             </div>
-            <h1 className="st-title">Data Siswa / Santri</h1>
+            <h1 className="st-title">Master Data Siswa & Santri</h1>
             <p className="st-subtitle">
-              Kelola direktori siswa, administrasi identitas NIS/NISN, data wali, dan status aktif SDIT AT-TAQWIM.
+              Direktori resmi kependudukan siswa, rombongan belajar, verifikasi berkas, dan profil terpadu SDIT AT-TAQWIM.
             </p>
           </div>
         </div>
 
         {can("master") && (
-          <div className="st-header-actions">
+          <div className="st-header-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {drafts.length > 0 && (
+              <button
+                type="button"
+                className="st-btn-secondary"
+                onClick={() => setShowDraftsModal(true)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 12px" }}
+              >
+                <Clock size={15} />
+                <span>Draf ({drafts.length})</span>
+              </button>
+            )}
+
+            {pendingRequests.length > 0 && (
+              <button
+                type="button"
+                className="st-btn-secondary"
+                onClick={() => setShowChangeRequestsModal(true)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 12,
+                  padding: "8px 12px",
+                  borderColor: "#d97706",
+                  color: "#b45309",
+                }}
+              >
+                <FileCheck size={15} />
+                <span>Usulan Wali ({pendingRequests.length})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="st-btn-secondary"
+              onClick={() => {
+                setImportStep(1);
+                setImportRows([]);
+                setImportErrors([]);
+                setShowImportModal(true);
+              }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 12px" }}
+            >
+              <Upload size={15} />
+              <span>Import Excel</span>
+            </button>
+
+            <button
+              type="button"
+              className="st-btn-secondary"
+              onClick={() => setShowExportModal(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 12px" }}
+            >
+              <Download size={15} />
+              <span>Export</span>
+            </button>
+
             <Link href="/master/siswa/tambah" className="st-btn-primary">
-              <UserPlus size={18} />
-              <span>Tambah Siswa Baru</span>
+              <UserPlus size={16} />
+              <span>Tambah Siswa</span>
             </Link>
           </div>
         )}
       </div>
 
-      {/* Filter and Metrics Strip */}
+      {/* Summary Metrics Row */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 12,
+          margin: "16px 0",
+        }}
+      >
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid var(--border, #e2e8f0)",
+            borderRadius: 10,
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "#f1f5f9",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#334155",
+            }}
+          >
+            <Users size={18} />
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Total Terdaftar</span>
+            <strong style={{ fontSize: 18, color: "#0f172a" }}>{students.length}</strong>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid var(--border, #e2e8f0)",
+            borderRadius: 10,
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "#ecfdf5",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#16613e",
+            }}
+          >
+            <CheckCircle2 size={18} />
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Siswa Aktif</span>
+            <strong style={{ fontSize: 18, color: "#16613e" }}>{activeCount}</strong>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid var(--border, #e2e8f0)",
+            borderRadius: 10,
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "#eff6ff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#2563eb",
+            }}
+          >
+            <FileCheck size={18} />
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Biodata Lengkap</span>
+            <strong style={{ fontSize: 18, color: "#2563eb" }}>{completeCount}</strong>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid var(--border, #e2e8f0)",
+            borderRadius: 10,
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "#fffbeb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#d97706",
+            }}
+          >
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Belum Lengkap</span>
+            <strong style={{ fontSize: 18, color: "#d97706" }}>{incompleteCount}</strong>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid var(--border, #e2e8f0)",
+            borderRadius: 10,
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: "#f5f3ff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#7c3aed",
+            }}
+          >
+            <Clock size={18} />
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Draf Pendaftaran</span>
+            <strong style={{ fontSize: 18, color: "#7c3aed" }}>{drafts.length}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
       <div className="st-filter-card">
         <div className="st-search-box">
           <Search size={18} className="st-search-icon" />
@@ -140,7 +626,7 @@ export default function MasterSiswaPage() {
           )}
         </div>
 
-        <div className="st-filter-group">
+        <div className="st-filter-group" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <div className="st-select-wrapper">
             <Filter size={16} className="st-select-icon" />
             <select
@@ -158,6 +644,19 @@ export default function MasterSiswaPage() {
                   </option>
                 );
               })}
+            </select>
+          </div>
+
+          <div className="st-select-wrapper">
+            <select
+              className="st-select"
+              value={completenessFilter}
+              onChange={(e) => setCompletenessFilter(e.target.value as any)}
+              aria-label="Filter Kelengkapan Berkas"
+            >
+              <option value="ALL">Semua Kelengkapan</option>
+              <option value="COMPLETE">Lengkap (≥ 80%)</option>
+              <option value="INCOMPLETE">Belum Lengkap (&lt; 80%)</option>
             </select>
           </div>
 
@@ -201,7 +700,7 @@ export default function MasterSiswaPage() {
             <Users size={48} className="st-empty-icon" />
             <h3>Tidak ada data siswa ditemukan</h3>
             <p>
-              {search || selectedClass !== "ALL" || statusFilter !== "ALL"
+              {search || selectedClass !== "ALL" || statusFilter !== "ALL" || completenessFilter !== "ALL"
                 ? "Coba ubah kata kunci pencarian atau sesuaikan filter kelas/status di atas."
                 : "Belum ada data siswa yang tersimpan di sistem."}
             </p>
@@ -223,6 +722,7 @@ export default function MasterSiswaPage() {
                   <th>Siswa / Santri</th>
                   <th>NIS & NISN</th>
                   <th>Kelas & Tahun Ajaran</th>
+                  <th>Kelengkapan</th>
                   <th>Status</th>
                   <th style={{ textAlign: "right", minWidth: 200 }}>Aksi</th>
                 </tr>
@@ -233,6 +733,7 @@ export default function MasterSiswaPage() {
                   const academicYear = academicYears.find(
                     (y) => y.id === classItem?.academicYearId,
                   );
+                  const completenessPercent = estimateCompleteness(s);
 
                   return (
                     <tr key={s.id} className="st-table-row">
@@ -293,6 +794,47 @@ export default function MasterSiswaPage() {
                           <span className="st-class-year">
                             TA {academicYear?.name || "—"}
                           </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, width: 110 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                            <span style={{ color: "var(--muted)" }}>Biodata</span>
+                            <strong
+                              style={{
+                                color:
+                                  completenessPercent >= 80
+                                    ? "#16613e"
+                                    : completenessPercent >= 50
+                                    ? "#d97706"
+                                    : "#dc2626",
+                              }}
+                            >
+                              {completenessPercent}%
+                            </strong>
+                          </div>
+                          <div
+                            style={{
+                              width: "100%",
+                              height: 5,
+                              background: "#f1f5f9",
+                              borderRadius: 3,
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${completenessPercent}%`,
+                                height: "100%",
+                                background:
+                                  completenessPercent >= 80
+                                    ? "#16613e"
+                                    : completenessPercent >= 50
+                                    ? "#d97706"
+                                    : "#dc2626",
+                              }}
+                            />
+                          </div>
                         </div>
                       </td>
                       <td>
@@ -369,6 +911,555 @@ export default function MasterSiswaPage() {
           </div>
         )}
       </div>
+
+      {/* MODAL: Draf Pendaftaran Tersimpan */}
+      {showDraftsModal && (
+        <Modal
+          title={`Draf Pendaftaran Siswa (${drafts.length})`}
+          close={() => setShowDraftsModal(false)}
+        >
+          <div style={{ maxHeight: "65vh", overflowY: "auto" }}>
+            {drafts.length === 0 ? (
+              <p style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: 20 }}>
+                Tidak ada draf pendaftaran tersimpan.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {drafts.map((d) => (
+                  <div
+                    key={d.id}
+                    style={{
+                      border: "1px solid var(--border, #e2e8f0)",
+                      borderRadius: 8,
+                      padding: 12,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 13, display: "block" }}>
+                        {d.studentName || "Calon Siswa Tanpa Nama"}
+                      </strong>
+                      <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                        Langkah Terakhir: <b>{d.stepName || "Identitas"}</b> • Diperbarui:{" "}
+                        {formatDateIndo(d.updatedAt)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="st-btn-secondary"
+                        onClick={() => handleDeleteDraft(d.id)}
+                        style={{ padding: "6px 10px", fontSize: 11 }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => {
+                          setShowDraftsModal(false);
+                          router.push(`/master/siswa/tambah?draftId=${d.id}`);
+                        }}
+                        style={{ padding: "6px 12px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 5 }}
+                      >
+                        <span>Lanjutkan</span>
+                        <ArrowRight size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Usulan Pembaruan Biodata dari Wali */}
+      {showChangeRequestsModal && (
+        <Modal
+          title={`Pengajuan Pembaruan Biodata Wali (${pendingRequests.length} Menunggu Review)`}
+          close={() => setShowChangeRequestsModal(false)}
+        >
+          <div style={{ maxHeight: "70vh", overflowY: "auto" }}>
+            {pendingRequests.length === 0 ? (
+              <p style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: 20 }}>
+                Semua pengajuan telah diproses atau belum ada pengajuan baru dari wali murid.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {pendingRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    style={{
+                      border: "1px solid var(--border, #e2e8f0)",
+                      borderRadius: 10,
+                      padding: 14,
+                      background: "#ffffff",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div>
+                        <strong style={{ fontSize: 13 }}>Siswa ID: {req.studentId}</strong>
+                        <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>
+                          Diajukan pada: {formatDateIndo(req.createdAt)}
+                        </span>
+                      </div>
+                      <span className="st-badge st-badge-amber">Menunggu Verifikasi</span>
+                    </div>
+
+                    <div style={{ fontSize: 12, margin: "8px 0" }}>
+                      <span style={{ color: "var(--muted)", display: "block" }}>Alasan Perubahan:</span>
+                      <p style={{ margin: "2px 0 8px", fontStyle: "italic" }}>
+                        &ldquo;{req.reason || "Pembaruan data kependudukan / nomor kontak"}&rdquo;
+                      </p>
+                      <span style={{ color: "var(--muted)", display: "block" }}>Data yang Diusulkan:</span>
+                      <pre
+                        style={{
+                          background: "#f1f5f9",
+                          padding: 8,
+                          borderRadius: 6,
+                          fontSize: 11,
+                          overflowX: "auto",
+                        }}
+                      >
+                        {JSON.stringify(req.requestedData, null, 2)}
+                      </pre>
+                    </div>
+
+                    {reviewingReqId === req.id ? (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #e2e8f0" }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                          Catatan Review Tata Usaha
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Catatan persetujuan / alasan penolakan..."
+                          value={reviewNotes}
+                          onChange={(e) => setReviewNotes(e.target.value)}
+                          className="st-input"
+                          style={{ marginBottom: 10 }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                          <button
+                            type="button"
+                            className="outline tiny"
+                            onClick={() => setReviewingReqId(null)}
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            className="danger tiny"
+                            onClick={() => handleReviewChangeRequest(req.id, "REJECTED")}
+                          >
+                            Tolak
+                          </button>
+                          <button
+                            type="button"
+                            className="primary tiny"
+                            onClick={() => handleReviewChangeRequest(req.id, "APPROVED")}
+                          >
+                            Setujui Pembaruan
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="primary tiny"
+                          onClick={() => {
+                            setReviewingReqId(req.id);
+                            setReviewNotes("");
+                          }}
+                        >
+                          Review Pengajuan Ini
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Wizard Import Excel (5 Tahap) */}
+      {showImportModal && (
+        <Modal
+          title="Wizard Import Data Siswa (Excel / CSV)"
+          close={() => setShowImportModal(false)}
+        >
+          <div style={{ minWidth: 480, maxHeight: "75vh", overflowY: "auto" }}>
+            {/* Steps Indicator */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 20,
+                borderBottom: "1px solid #e2e8f0",
+                paddingBottom: 12,
+                fontSize: 11,
+              }}
+            >
+              <span style={{ fontWeight: importStep === 1 ? 700 : 400, color: importStep === 1 ? "var(--primary)" : "inherit" }}>
+                1. Template
+              </span>
+              <ChevronRight size={14} color="#94a3b8" />
+              <span style={{ fontWeight: importStep === 2 ? 700 : 400, color: importStep === 2 ? "var(--primary)" : "inherit" }}>
+                2. Unggah
+              </span>
+              <ChevronRight size={14} color="#94a3b8" />
+              <span style={{ fontWeight: importStep === 3 ? 700 : 400, color: importStep === 3 ? "var(--primary)" : "inherit" }}>
+                3. Validasi
+              </span>
+              <ChevronRight size={14} color="#94a3b8" />
+              <span style={{ fontWeight: importStep === 4 ? 700 : 400, color: importStep === 4 ? "var(--primary)" : "inherit" }}>
+                4. Konfirmasi
+              </span>
+              <ChevronRight size={14} color="#94a3b8" />
+              <span style={{ fontWeight: importStep === 5 ? 700 : 400, color: importStep === 5 ? "var(--primary)" : "inherit" }}>
+                5. Selesai
+              </span>
+            </div>
+
+            {/* STEP 1: Unduh Template */}
+            {importStep === 1 && (
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 1: Unduh Format Template Standar</h4>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+                  Pastikan susunan kolom berkas impor sesuai dengan struktur baku SDIT AT-TAQWIM agar tidak terjadi kesalahan pemetaan data.
+                </p>
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                    padding: 16,
+                    marginBottom: 20,
+                    fontSize: 11,
+                  }}
+                >
+                  <strong>Ketentuan Data:</strong>
+                  <ul style={{ margin: "6px 0 0", paddingLeft: 18, color: "#475569" }}>
+                    <li>NIS wajib unik dan tidak boleh duplikat dengan siswa yang sudah ada.</li>
+                    <li>Kolom NAMA_LENGKAP wajib diisi.</li>
+                    <li>Format tanggal lahir menggunakan format YYYY-MM-DD (Contoh: 2018-05-14).</li>
+                  </ul>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="st-btn-secondary"
+                    onClick={handleDownloadTemplate}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}
+                  >
+                    <Download size={14} /> Unduh Template CSV (.csv)
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => setImportStep(2)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <span>Lanjut ke Unggah Berkas</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: Unggah Berkas */}
+            {importStep === 2 && (
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 2: Pilih Berkas Excel / CSV</h4>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+                  Pilih berkas CSV atau XLSX yang sudah Anda lengkapi sesuai template.
+                </p>
+                <div
+                  style={{
+                    border: "2px dashed #cbd5e1",
+                    borderRadius: 10,
+                    padding: "30px 20px",
+                    textAlign: "center",
+                    marginBottom: 20,
+                    background: "#f8fafc",
+                  }}
+                >
+                  <Upload size={32} style={{ margin: "0 auto 10px", color: "var(--primary)" }} />
+                  <p style={{ margin: "0 0 10px", fontSize: 12 }}>Pilih file dari komputer Anda:</p>
+                  <input
+                    type="file"
+                    accept=".csv, text/csv"
+                    onChange={handleFileUpload}
+                    style={{ fontSize: 12 }}
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => setImportStep(1)}
+                  >
+                    Kembali
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: Validasi Baris */}
+            {importStep === 3 && (
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>
+                  Langkah 3: Hasil Validasi Baris Data ({importRows.length} Baris Terdeteksi)
+                </h4>
+                {importErrors.length > 0 ? (
+                  <div
+                    style={{
+                      background: "#fef2f2",
+                      border: "1px solid #fecaca",
+                      borderRadius: 8,
+                      padding: 12,
+                      marginBottom: 16,
+                      fontSize: 11,
+                      color: "#991b1b",
+                    }}
+                  >
+                    <strong>Ditemukan {importErrors.length} Kesalahan:</strong>
+                    <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                      {importErrors.slice(0, 5).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                      {importErrors.length > 5 && <li>...dan {importErrors.length - 5} kesalahan lainnya.</li>}
+                    </ul>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 8,
+                      padding: 12,
+                      marginBottom: 16,
+                      fontSize: 12,
+                      color: "#166534",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>Seluruh baris data valid dan siap untuk diimpor ke sistem.</span>
+                  </div>
+                )}
+
+                <div className="table-scroll" style={{ maxHeight: 200, marginBottom: 16 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Baris</th>
+                        <th>NIS</th>
+                        <th>Nama Siswa</th>
+                        <th>Kelas</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.slice(0, 10).map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.rowNum}</td>
+                          <td>{r.nis}</td>
+                          <td>{r.name}</td>
+                          <td>{r.className || "—"}</td>
+                          <td>
+                            {r.isValid ? (
+                              <span className="st-badge st-badge-green">Valid</span>
+                            ) : (
+                              <span className="st-badge st-badge-amber">Gagal</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => setImportStep(2)}
+                  >
+                    Unggah Ulang
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={importErrors.length > 0}
+                    onClick={() => setImportStep(4)}
+                  >
+                    Lanjut ke Konfirmasi
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 4: Konfirmasi */}
+            {importStep === 4 && (
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 4: Konfirmasi Komit Impor</h4>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+                  Sebanyak <b>{importRows.length}</b> siswa akan ditambahkan ke database SDIT AT-TAQWIM.
+                </p>
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                    padding: 14,
+                    marginBottom: 20,
+                    fontSize: 12,
+                  }}
+                >
+                  <p style={{ margin: 0 }}>
+                    Sistem akan membuat record master siswa baru dengan status <b>Aktif</b>. Anda dapat melengkapi
+                    data orang tua dan dokumen fisik kapan saja setelah proses selesai.
+                  </p>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => setImportStep(3)}
+                  >
+                    Kembali
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={isProcessingImport}
+                    onClick={async () => {
+                      setIsProcessingImport(true);
+                      // Simulate processing
+                      setTimeout(() => {
+                        setIsProcessingImport(false);
+                        setImportStep(5);
+                      }, 1000);
+                    }}
+                  >
+                    {isProcessingImport ? "Mengimpor..." : "Ya, Impor Sekarang"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 5: Selesai */}
+            {importStep === 5 && (
+              <div style={{ textAlign: "center", padding: "10px 0" }}>
+                <CheckCircle2 size={42} color="#16613e" style={{ margin: "0 auto 10px" }} />
+                <h4 style={{ margin: "0 0 6px", fontSize: 15 }}>Impor Berhasil Selesai!</h4>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 20px" }}>
+                  Sebanyak {importRows.length} siswa berhasil didaftarkan ke sistem master siswa.
+                </p>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    window.location.reload();
+                  }}
+                >
+                  Selesai & Muat Ulang Daftar
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Export Data Siswa */}
+      {showExportModal && (
+        <Modal
+          title="Export Data Master Siswa"
+          close={() => setShowExportModal(false)}
+        >
+          <div style={{ minWidth: 420 }}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 6 }}>
+                Cakupan Data yang Diexport
+              </label>
+              <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={exportScope === "FILTERED"}
+                    onChange={() => setExportScope("FILTERED")}
+                  />
+                  <span>Data Terfilter ({filteredStudents.length} siswa)</span>
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={exportScope === "ALL"}
+                    onChange={() => setExportScope("ALL")}
+                  />
+                  <span>Seluruh Siswa ({students.length} siswa)</span>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 6 }}>
+                Pilihan Kolom Data
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={exportCols.identity}
+                    onChange={(e) => setExportCols({ ...exportCols, identity: e.target.checked })}
+                  />
+                  <span>Identitas Lengkap (NIS, NISN, NIK, Nama, JK, TTL)</span>
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={exportCols.academic}
+                    onChange={(e) => setExportCols({ ...exportCols, academic: e.target.checked })}
+                  />
+                  <span>Rombel & Status (Kelas, Tahun Ajaran, Status Aktif)</span>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() => setShowExportModal(false)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={handleExportCsv}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <Download size={14} /> Unduh Berkas CSV / Excel
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Delete Confirmation Modal */}
       {studentToDelete && (

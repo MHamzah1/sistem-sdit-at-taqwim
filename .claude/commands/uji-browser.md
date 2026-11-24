@@ -16,7 +16,7 @@ $ARGUMENTS
 
 - **Target Default: localhost.** Pastikan server Next.js berjalan:
   ```sh
-  npm run dev   # Berjalan di http://localhost:3000
+  npm run dev   # Berjalan di http://localhost:3002
   ```
 - **Playwright Chromium:** Jika browser binary belum terpasang, jalankan:
   ```sh
