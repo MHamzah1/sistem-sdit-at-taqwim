@@ -44,6 +44,7 @@ import { readState } from "./state";
 import {
   downloadProof,
   downloadStudentDocument,
+  downloadStudentPhoto,
   registerProof,
   uploadToken,
 } from "./files";
@@ -266,6 +267,11 @@ export async function handle(
         },
       });
     }
+    const studentPhotoMatch = /^students\/([^/]+)\/photo$/.exec(path);
+    if (studentPhotoMatch && method === "GET") {
+      const sId = uuid.parse(studentPhotoMatch[1]);
+      return await downloadStudentPhoto(db, ctx, sId);
+    }
     if (path === "students/completeness-summary" && method === "GET") {
       const classId = url.searchParams.get("classId") || undefined;
       return json(await getStudentsCompletenessSummary(db, actor, classId));
@@ -275,8 +281,8 @@ export async function handle(
       return json(await previewStudentImport(db, actor, rows));
     }
     if (path === "students/import/commit" && method === "POST") {
-      const validRows = (await payload(request)) as any;
-      return json(await commitStudentImport(db, ctx, validRows));
+      const body = await payload(request);
+      return json(await commitStudentImport(db, ctx, body));
     }
     if (path === "family-members/search" && method === "GET") {
       return json(await searchFamilyMembers(db, actor, url.searchParams.get("q") || ""));

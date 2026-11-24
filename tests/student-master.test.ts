@@ -11,7 +11,12 @@ import {
   maskPhone,
   ALLOWED_GUARDIAN_PATCH_KEYS,
   generateStudentImportTemplateXlsx,
+  generateImportPreviewToken,
+  verifyImportPreviewToken,
+  commitImportSchema,
+  studentDocumentItemSchema,
 } from "../server/studentMaster";
+import { normalizeDraftData } from "../src/app/(app)/master/siswa/tambah/page";
 import {
   sanitizeForAudit,
   canAccessSensitiveStudentData,
@@ -530,16 +535,15 @@ test("TC-76: studentIdentitySchema validates all 10 recovered schema columns", (
   });
 });
 
-test("TC-83: rejects local blob and data URL in photoUrl", () => {
-  assert.throws(() => {
-    studentIdentitySchema.parse({
-      name: "Ahmad",
-      nis: "262701999",
-      classId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-      enrolledOn: "2026-07-15",
-      photoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-    });
+test("TC-83: preserves legacy data URL in photoUrl and rejects local blob URLs", () => {
+  const parsed = studentIdentitySchema.parse({
+    name: "Ahmad",
+    nis: "262701999",
+    classId: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    enrolledOn: "2026-07-15",
+    photoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   });
+  assert.ok(parsed.photoUrl?.startsWith("data:"));
 
   assert.throws(() => {
     studentIdentitySchema.parse({
@@ -645,4 +649,268 @@ test("TC-94: generateStudentImportTemplateXlsx generates authentic XLSX binary",
   // OOXML ZIP magic bytes: PK (0x50 0x4B)
   assert.equal(buf[0], 0x50);
   assert.equal(buf[1], 0x4b);
+});
+
+test("TC-101 (FIX-010): normalizeDraftData maps draft object shape to arrays without .find is not a function", () => {
+  const draftData = {
+    student: { name: "Aisyah Humaira", nis: "262701050" },
+    addresses: {
+      identity: {
+        address: "Jl. Dahlia No. 1",
+        regency: "Kab. Bogor",
+        transportationType: "MOTORCYCLE",
+      },
+      domicile: { address: "Jl. Melati No. 2", regency: "Kab. Bogor" },
+    },
+    family: {
+      father: {
+        name: "Budi Santoso",
+        id: "550e8400-e29b-41d4-a716-446655440001",
+      },
+      mother: {
+        name: "Siti Rahma",
+        id: "550e8400-e29b-41d4-a716-446655440002",
+      },
+      primaryContact: "FATHER",
+      paymentResponsible: "FATHER",
+      emergencyContact: {
+        name: "Hasan",
+        phone: "081234567890",
+        relationship: "UNCLE",
+      },
+    },
+    health: { bloodType: "B" },
+    aid: [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440003",
+        aidType: "KIP",
+        aidNumber: "KIP-999",
+      },
+    ],
+    measurements: [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440004",
+        measurementDate: "2026-08-01",
+        heightCm: 120,
+        weightKg: 22,
+      },
+    ],
+    documents: [],
+  };
+
+  const normalized = normalizeDraftData(draftData);
+  assert.ok(Array.isArray(normalized.addresses), "addresses must be array");
+  assert.equal(normalized.addresses.length, 2);
+  assert.equal(normalized.addresses[0].addressType, "IDENTITY");
+  assert.equal(normalized.addresses[1].addressType, "DOMICILE");
+
+  assert.ok(Array.isArray(normalized.family), "family must be array");
+  assert.equal(normalized.family.length, 3);
+  assert.equal(normalized.family[0].relationshipType, "FATHER");
+  assert.equal(normalized.family[0].isPrimaryContact, true);
+  assert.equal(normalized.family[2].isEmergencyContact, true);
+
+  // Safe against .find() call
+  const idAddr = normalized.addresses.find(
+    (a: any) => a.addressType === "IDENTITY",
+  );
+  assert.equal(idAddr?.address, "Jl. Dahlia No. 1");
+});
+
+test("TC-102 (FIX-011): legacy photo compatibility preserves data URLs and rejects blob URLs", () => {
+  const legacyDataUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+  const parsedLegacy = studentIdentitySchema.parse({
+    name: "Siswa Lama",
+    nis: "262701051",
+    classId: "550e8400-e29b-41d4-a716-446655440000",
+    enrolledOn: "2026-07-15",
+    photoUrl: legacyDataUrl,
+  });
+  assert.equal(parsedLegacy.photoUrl, legacyDataUrl);
+
+  const storagePath =
+    "student-documents/550e8400-e29b-41d4-a716-446655440000/photo.jpg";
+  const parsedStorage = studentIdentitySchema.parse({
+    name: "Siswa Baru",
+    nis: "262701052",
+    classId: "550e8400-e29b-41d4-a716-446655440000",
+    enrolledOn: "2026-07-15",
+    photoUrl: storagePath,
+  });
+  assert.equal(parsedStorage.photoUrl, storagePath);
+
+  assert.throws(() => {
+    studentIdentitySchema.parse({
+      name: "Siswa Gagal",
+      nis: "262701053",
+      classId: "550e8400-e29b-41d4-a716-446655440000",
+      enrolledOn: "2026-07-15",
+      photoUrl: "blob:http://localhost:3002/local-uuid-photo",
+    });
+  });
+});
+
+test("TC-103 (FIX-011): studentDocumentItemSchema enforces strict validation and rejects fake staging paths", () => {
+  const validDoc = {
+    documentType: "KK",
+    documentName: "Kartu Keluarga",
+    storagePath:
+      "student-documents/550e8400-e29b-41d4-a716-446655440000/uuid.pdf",
+    originalFilename: "kk.pdf",
+    mimeType: "application/pdf",
+    fileSize: 1048576,
+  };
+  const parsed = studentDocumentItemSchema.parse(validDoc);
+  assert.equal(parsed.documentType, "KK");
+  assert.equal(parsed.verificationStatus, "PENDING");
+
+  assert.throws(() => {
+    studentDocumentItemSchema.parse({
+      ...validDoc,
+      mimeType: "application/x-msdownload",
+    });
+  });
+
+  assert.throws(() => {
+    studentDocumentItemSchema.parse({
+      ...validDoc,
+      fileSize: 6 * 1024 * 1024,
+    });
+  });
+});
+
+test("TC-104 (FIX-012): generateImportPreviewToken and verifyImportPreviewToken HMAC security", () => {
+  const actorId = "550e8400-e29b-41d4-a716-446655440010";
+  const rows = [
+    {
+      rowNum: 1,
+      nis: "262701001",
+      name: "Santri 1",
+      gender: "L",
+      className: "1-A",
+      resolvedClassId: "cls-1",
+    },
+  ];
+
+  const token = generateImportPreviewToken(actorId, rows);
+  assert.ok(typeof token === "string");
+  assert.ok(token.length > 20);
+
+  // Valid verification
+  assert.equal(verifyImportPreviewToken(token, actorId, rows), true);
+
+  // Cross-actor forgery rejected
+  const impostorId = "550e8400-e29b-41d4-a716-446655440099";
+  assert.equal(verifyImportPreviewToken(token, impostorId, rows), false);
+
+  // Tampered payload rejected
+  const tamperedRows = [
+    {
+      rowNum: 1,
+      nis: "262701001",
+      name: "Santri Hacked",
+      gender: "L",
+      className: "1-A",
+      resolvedClassId: "cls-1",
+    },
+  ];
+  assert.equal(verifyImportPreviewToken(token, actorId, tamperedRows), false);
+});
+
+test("TC-105 (FIX-012): commitImportSchema validates import payload and enforces strict structure", () => {
+  const validPayload = {
+    token: "mock-valid-token-string",
+    rows: [
+      {
+        rowNum: 1,
+        nis: "262701001",
+        nik: "3201011005180001",
+        familyCardNumber: "3201012001150002",
+        name: "Santri Satu",
+        gender: "L",
+        className: "1-A",
+        resolvedClassId: "cls-1",
+      },
+    ],
+  };
+
+  const parsed = commitImportSchema.parse(validPayload);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0].nik, "3201011005180001");
+  assert.equal(parsed.rows[0].familyCardNumber, "3201012001150002");
+
+  assert.throws(() => {
+    commitImportSchema.parse({ token: "tok", rows: [] });
+  });
+
+  assert.throws(() => {
+    commitImportSchema.parse({ token: "", rows: validPayload.rows });
+  });
+});
+
+test("TC-106 (FIX-013 & FIX-014): calculateStudentCompleteness handles composite data, resolves 100%, and preserves record IDs", () => {
+  const measureId = "550e8400-e29b-41d4-a716-446655440020";
+  const aidId = "550e8400-e29b-41d4-a716-446655440021";
+
+  const parsedMeasure = periodicMeasurementSchema.parse({
+    id: measureId,
+    measurementDate: "2026-08-10",
+    heightCm: 128,
+    weightKg: 26,
+    headCircumferenceCm: 51,
+  });
+  assert.equal(parsedMeasure.id, measureId);
+  assert.equal(parsedMeasure.headCircumferenceCm, 51);
+
+  const parsedAid = aidItemSchema.parse({
+    id: aidId,
+    aidType: "KIP",
+    aidNumber: null,
+    aidSource: "Kemdikbud",
+    amount: 500000,
+    status: "ACTIVE",
+  });
+  assert.equal(parsedAid.id, aidId);
+  assert.equal(parsedAid.aidNumber, null);
+  assert.equal(parsedAid.aidSource, "Kemdikbud");
+
+  // Composite 10-section completeness test
+  const comp = calculateStudentCompleteness({
+    student: {
+      name: "Zaid bin Haritsah",
+      nis: "262701005",
+      nik: "3201011005180005",
+      gender: "L",
+      birthDate: "2018-03-12",
+    },
+    addresses: [
+      {
+        addressType: "IDENTITY",
+        address: "Dusun II",
+        regency: "Kab. Bogor",
+        transportationType: "BICYCLE",
+      },
+    ],
+    registration: {
+      classId: "cls-1",
+      enrolledOn: "2026-07-15",
+    },
+    family: {
+      father: { fullName: "Haritsah", lifeStatus: "ALIVE" },
+      mother: { fullName: "Ummu Zaid", lifeStatus: "ALIVE" },
+      emergencyContact: { name: "Haritsah", phone: "081234567899" },
+    },
+    health: { bloodType: "A" },
+    characteristic: { status: "FILLED" },
+    documents: [
+      { documentType: "KK", verificationStatus: "VERIFIED" },
+      { documentType: "AKTA_KELAHIRAN", verificationStatus: "VERIFIED" },
+      { documentType: "PAS_FOTO", verificationStatus: "VERIFIED" },
+    ],
+  });
+
+  assert.equal(comp.percentage, 100);
+  assert.equal(comp.overallPercent, 100);
+  assert.equal(comp.isComplete, true);
+  assert.equal(comp.missingFields.length, 0);
 });

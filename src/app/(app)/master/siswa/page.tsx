@@ -45,23 +45,17 @@ type Student = AppState["students"][number];
 function calculateCompletenessScore(
   s: Student,
   summaryMap?: Record<string, { percentage: number }>,
-): number {
+): number | null {
   if (summaryMap && summaryMap[s.id]) {
     return summaryMap[s.id].percentage;
   }
-  let score = 0;
-  const total = 5;
-  if (s.name) score += 1;
-  if (s.nis) score += 1;
-  if (s.gender) score += 1;
-  if (s.classId) score += 1;
-  if (s.enrolledOn) score += 1;
-  return Math.round((score / total) * 100);
+  // Authoritative backend engine is the single source of truth; never forge fake 100%
+  return null;
 }
 
 export default function MasterSiswaPage() {
   const router = useRouter();
-  const { state, loading, busy, run, can, isGuardian } = useApp();
+  const { state, loading, busy, run, can, isGuardian, refresh } = useApp();
 
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("ALL");
@@ -88,6 +82,7 @@ export default function MasterSiswaPage() {
     createdCount: number;
     failedCount: number;
   } | null>(null);
+  const [importPreviewToken, setImportPreviewToken] = useState<string>("");
 
   // Export modal state
   const [showExportModal, setShowExportModal] = useState(false);
@@ -145,11 +140,9 @@ export default function MasterSiswaPage() {
       if (statusFilter === "INACTIVE" && s.active) return false;
 
       // Filter by completeness
-      const comp =
-        completenessSummary[s.id]?.percentage ??
-        calculateCompletenessScore(s, completenessSummary);
-      if (completenessFilter === "COMPLETE" && comp < 100) return false;
-      if (completenessFilter === "INCOMPLETE" && comp >= 100) return false;
+      const comp = completenessSummary[s.id]?.percentage ?? null;
+      if (completenessFilter === "COMPLETE" && (comp === null || comp < 100)) return false;
+      if (completenessFilter === "INCOMPLETE" && (comp === null || comp >= 100)) return false;
 
       // Filter by search
       if (search.trim()) {
@@ -226,10 +219,8 @@ export default function MasterSiswaPage() {
   const completeCount = useMemo(
     () =>
       students.filter((s) => {
-        const comp =
-          completenessSummary[s.id]?.percentage ??
-          calculateCompletenessScore(s, completenessSummary);
-        return comp >= 100;
+        const comp = completenessSummary[s.id]?.percentage ?? null;
+        return comp !== null && comp >= 100;
       }).length,
     [students, completenessSummary],
   );
@@ -371,6 +362,7 @@ export default function MasterSiswaPage() {
         }
 
         const preview = await api<any>("students/import/preview", "POST", rawRows);
+        setImportPreviewToken(preview.previewToken || "");
         setImportRows(preview.rows || []);
         const errs: string[] = [];
         (preview.rows || []).forEach((r: any) => {
@@ -772,8 +764,7 @@ export default function MasterSiswaPage() {
                     (y) => y.id === classItem?.academicYearId,
                   );
                   const completenessPercent =
-                    completenessSummary[s.id]?.percentage ??
-                    calculateCompletenessScore(s, completenessSummary);
+                    completenessSummary[s.id]?.percentage ?? null;
 
                   return (
                     <tr key={s.id} className="st-table-row">
@@ -843,14 +834,16 @@ export default function MasterSiswaPage() {
                             <strong
                               style={{
                                 color:
-                                  completenessPercent >= 80
+                                  completenessPercent === null
+                                    ? "var(--muted)"
+                                    : completenessPercent >= 80
                                     ? "#16613e"
                                     : completenessPercent >= 50
                                     ? "#d97706"
                                     : "#dc2626",
                               }}
                             >
-                              {completenessPercent}%
+                              {completenessPercent === null ? "—" : `${completenessPercent}%`}
                             </strong>
                           </div>
                           <div
@@ -864,10 +857,15 @@ export default function MasterSiswaPage() {
                           >
                             <div
                               style={{
-                                width: `${completenessPercent}%`,
+                                width:
+                                  completenessPercent === null
+                                    ? "0%"
+                                    : `${completenessPercent}%`,
                                 height: "100%",
                                 background:
-                                  completenessPercent >= 80
+                                  completenessPercent === null
+                                    ? "transparent"
+                                    : completenessPercent >= 80
                                     ? "#16613e"
                                     : completenessPercent >= 50
                                     ? "#d97706"
@@ -1395,9 +1393,13 @@ export default function MasterSiswaPage() {
                         const result = await api<any>(
                           "students/import/commit",
                           "POST",
-                          validRows,
+                          {
+                            token: importPreviewToken,
+                            rows: validRows,
+                          },
                         );
                         setImportCommitResult(result);
+                        await refresh();
                         setImportStep(5);
                       } catch (err: any) {
                         alert(err.message || "Gagal melakukan impor ke server");

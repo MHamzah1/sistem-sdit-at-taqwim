@@ -55,7 +55,9 @@ export async function uploadToken(db: Database, request: Request) {
         throw new HttpError(429, "Batas upload per jam tercapai");
 
       const isProof = pathname.startsWith("proofs/");
-      const isDoc = pathname.startsWith("student-documents/");
+      const isDoc =
+        pathname.startsWith("student-documents/") ||
+        pathname.startsWith("student-photos/");
       if (isProof) {
         if (!isGuardian(actor)) allow(actor, "finance");
         if (
@@ -67,7 +69,7 @@ export async function uploadToken(db: Database, request: Request) {
       } else if (isDoc) {
         if (
           !new RegExp(
-            `^student-documents/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf|webp)$`,
+            `^(student-documents|student-photos)/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf|webp)$`,
           ).test(pathname)
         )
           throw new HttpError(422, "Nama file dokumen tidak valid");
@@ -278,6 +280,53 @@ export async function downloadStudentDocument(
       "Accept-Ranges": "bytes",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+export async function downloadStudentPhoto(
+  db: Database,
+  ctx: Context,
+  studentId: string,
+) {
+  if (isGuardian(ctx.actor)) {
+    await ownStudent(db, ctx.actor, studentId);
+  } else {
+    allow(ctx.actor, "read");
+  }
+
+  const [student] = await db
+    .select({ photoUrl: s.students.photoUrl })
+    .from(s.students)
+    .where(eq(s.students.id, studentId));
+
+  if (!student || !student.photoUrl) {
+    throw new HttpError(404, "Foto siswa tidak ditemukan");
+  }
+
+  if (student.photoUrl.startsWith("data:")) {
+    const parts = student.photoUrl.split(",");
+    const mime = parts[0].match(/:(.*?);/)?.[1] || "image/jpeg";
+    const buf = Buffer.from(parts[1], "base64");
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        "Content-Type": mime,
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  }
+
+  const file = await get(student.photoUrl, { access: "private", useCache: true });
+  if (!file || file.statusCode !== 200 || !file.stream) {
+    throw new HttpError(404, "File foto tidak ditemukan pada penyimpanan");
+  }
+
+  return new Response(file.stream, {
+    status: 200,
+    headers: {
+      "Content-Type": file.headers.get("content-type") || "image/jpeg",
+      "Cache-Control": "private, max-age=3600",
     },
   });
 }

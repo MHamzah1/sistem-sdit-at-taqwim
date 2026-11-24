@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { createHash, createHmac } from "node:crypto";
+import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import type { Database, Transaction } from "../src/db/client";
@@ -144,8 +144,8 @@ export const studentIdentitySchema = z.object({
   photoUrl: z
     .string()
     .trim()
-    .refine((v) => !v || (!v.startsWith("data:") && !v.startsWith("blob:")), {
-      message: "Foto tidak boleh berupa data URL atau blob lokal; unggah file terlebih dahulu",
+    .refine((v) => !v || !v.startsWith("blob:"), {
+      message: "Foto tidak boleh berupa blob URL lokal",
     })
     .nullable()
     .optional()
@@ -343,6 +343,29 @@ export const periodicMeasurementSchema = z
       new Date().toISOString().slice(0, 10),
   }));
 
+export const studentDocumentItemSchema = z.object({
+  id: uuid.optional(),
+  documentType: z.enum([
+    "KK",
+    "AKTA_KELAHIRAN",
+    "KTP_AYAH",
+    "KTP_IBU",
+    "IJAZAH_SEBELUMNYA",
+    "KIP_PIP",
+    "PAS_FOTO",
+    "SURAT_PINDAH",
+    "OTHER",
+  ]),
+  documentName: z.string().trim().min(1, "Nama dokumen wajib diisi").max(150),
+  documentNumber: z.string().trim().max(100).nullable().optional(),
+  storagePath: z.string().trim().min(1, "Storage path wajib ada"),
+  originalFilename: z.string().trim().min(1, "Nama file asli wajib ada"),
+  mimeType: z.enum(["image/jpeg", "image/png", "application/pdf", "image/webp"]),
+  fileSize: z.number().int().positive().max(5 * 1024 * 1024),
+  verificationStatus: z.enum(["PENDING", "VERIFIED", "REJECTED"]).optional().default("PENDING"),
+  uploadedBy: uuid.optional(),
+});
+
 export const fullStudentProfileSchema = z.object({
   student: studentIdentitySchema,
   addresses: addressesSchema.optional(),
@@ -351,7 +374,7 @@ export const fullStudentProfileSchema = z.object({
   health: healthSchema.optional(),
   aid: z.array(aidItemSchema).optional(),
   measurements: z.array(periodicMeasurementSchema).optional(),
-  documents: z.array(z.any()).optional(),
+  documents: z.array(studentDocumentItemSchema).optional(),
   draftId: uuid.nullable().optional(),
 });
 
@@ -375,22 +398,36 @@ export function calculateStudentCompleteness(data: {
     village?: string | null;
     transportationType?: string | null;
   } | null;
+  addresses?: Array<any> | null;
   registration?: {
     enrolledOn?: string | null;
     classId?: string | null;
   } | null;
   father?: { fullName?: string | null; lifeStatus?: string | null } | null;
   mother?: { fullName?: string | null; lifeStatus?: string | null } | null;
+  family?: any;
   emergencyContact?: { name?: string | null; phone?: string | null } | null;
   health?: { bloodType?: string | null } | null;
   characteristic?: { status?: string } | null;
   aidRecords?: Array<{ aidType: string; status: string }> | null;
+  aid?: Array<any> | null;
   documents?: Array<{ documentType: string; verificationStatus: string }>;
 }) {
   const sections: Record<
     string,
     { status: "COMPLETE" | "INCOMPLETE" | "NOT_APPLICABLE"; missing: string[] }
   > = {};
+
+  const resolvedAddr =
+    data.address ||
+    (Array.isArray(data.addresses)
+      ? data.addresses.find((a: any) => a.addressType === "IDENTITY") ||
+        data.addresses[0]
+      : null);
+  const resolvedFather = data.father || data.family?.father;
+  const resolvedMother = data.mother || data.family?.mother;
+  const resolvedEmergency =
+    data.emergencyContact || data.family?.emergencyContact;
 
   // 1. Identitas
   const identMissing: string[] = [];
@@ -406,9 +443,9 @@ export function calculateStudentCompleteness(data: {
 
   // 2. Alamat
   const addrMissing: string[] = [];
-  if (!data.address?.address) addrMissing.push("Alamat Jalan / Tempat Tinggal");
-  if (!data.address?.regency) addrMissing.push("Kota / Kabupaten");
-  if (!data.address?.transportationType) addrMissing.push("Moda Transportasi");
+  if (!resolvedAddr?.address) addrMissing.push("Alamat Jalan / Tempat Tinggal");
+  if (!resolvedAddr?.regency) addrMissing.push("Kota / Kabupaten");
+  if (!resolvedAddr?.transportationType) addrMissing.push("Moda Transportasi");
   sections["alamat"] = {
     status: addrMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
     missing: addrMissing,
@@ -425,10 +462,10 @@ export function calculateStudentCompleteness(data: {
 
   // 4. Data Ayah
   const fatherMissing: string[] = [];
-  if (data.father?.lifeStatus === "DECEASED") {
+  if (resolvedFather?.lifeStatus === "DECEASED") {
     sections["ayah"] = { status: "COMPLETE", missing: [] };
   } else {
-    if (!data.father?.fullName) fatherMissing.push("Nama Lengkap Ayah");
+    if (!resolvedFather?.fullName) fatherMissing.push("Nama Lengkap Ayah");
     sections["ayah"] = {
       status: fatherMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
       missing: fatherMissing,
@@ -437,10 +474,10 @@ export function calculateStudentCompleteness(data: {
 
   // 5. Data Ibu
   const motherMissing: string[] = [];
-  if (data.mother?.lifeStatus === "DECEASED") {
+  if (resolvedMother?.lifeStatus === "DECEASED") {
     sections["ibu"] = { status: "COMPLETE", missing: [] };
   } else {
-    if (!data.mother?.fullName) motherMissing.push("Nama Lengkap Ibu");
+    if (!resolvedMother?.fullName) motherMissing.push("Nama Lengkap Ibu");
     sections["ibu"] = {
       status: motherMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
       missing: motherMissing,
@@ -449,8 +486,8 @@ export function calculateStudentCompleteness(data: {
 
   // 6. Wali & Kontak Darurat
   const emMissing: string[] = [];
-  if (!data.emergencyContact?.name) emMissing.push("Nama Kontak Darurat");
-  if (!data.emergencyContact?.phone) emMissing.push("Nomor Telepon Darurat");
+  if (!resolvedEmergency?.name) emMissing.push("Nama Kontak Darurat");
+  if (!resolvedEmergency?.phone) emMissing.push("Nomor Telepon Darurat");
   sections["wali_darurat"] = {
     status: emMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
     missing: emMissing,
@@ -507,6 +544,7 @@ export function calculateStudentCompleteness(data: {
 
   return {
     percentage,
+    overallPercent: percentage,
     completed,
     total,
     applicableCount: total,
@@ -877,7 +915,7 @@ export async function createStudentAtomic(
         .where(
           and(
             eq(s.studentDrafts.id, input.draftId),
-            eq(s.studentDrafts.status, "ACTIVE"),
+            eq(s.studentDrafts.status, "DRAFT"),
           ),
         )
         .returning();
@@ -1536,7 +1574,7 @@ export async function updateStudentProfile(
     if (input.measurements && input.measurements.length > 0) {
       for (const m of input.measurements) {
         if (m.id) {
-          await tx
+          const updateResult = await tx
             .update(s.studentPeriodicData)
             .set({
               semester: m.semester || 1,
@@ -1551,7 +1589,14 @@ export async function updateStudentProfile(
                 eq(s.studentPeriodicData.id, m.id),
                 eq(s.studentPeriodicData.studentId, studentId),
               ),
+            )
+            .returning();
+          if (updateResult.length === 0) {
+            throw new HttpError(
+              404,
+              `Data pengukuran ${m.id} tidak ditemukan untuk siswa ini`,
             );
+          }
         } else {
           const [existingM] = await tx
             .select()
@@ -1593,7 +1638,7 @@ export async function updateStudentProfile(
     if (input.aid && input.aid.length > 0) {
       for (const a of input.aid) {
         if (a.id) {
-          await tx
+          const updateResult = await tx
             .update(s.studentAidRecords)
             .set({
               aidType: a.aidType,
@@ -1610,18 +1655,36 @@ export async function updateStudentProfile(
                 eq(s.studentAidRecords.id, a.id),
                 eq(s.studentAidRecords.studentId, studentId),
               ),
+            )
+            .returning();
+          if (updateResult.length === 0) {
+            throw new HttpError(
+              404,
+              `Data bantuan ${a.id} tidak ditemukan untuk siswa ini`,
             );
+          }
         } else {
+          const aidConds = [
+            eq(s.studentAidRecords.studentId, studentId),
+            eq(s.studentAidRecords.aidType, a.aidType),
+          ];
+          if (a.aidNumber) {
+            aidConds.push(eq(s.studentAidRecords.aidNumber, a.aidNumber));
+          } else {
+            aidConds.push(
+              or(
+                isNull(s.studentAidRecords.aidNumber),
+                eq(s.studentAidRecords.aidNumber, ""),
+              )!,
+            );
+            if (a.aidSource) {
+              aidConds.push(eq(s.studentAidRecords.aidSource, a.aidSource));
+            }
+          }
           const [existingA] = await tx
             .select()
             .from(s.studentAidRecords)
-            .where(
-              and(
-                eq(s.studentAidRecords.studentId, studentId),
-                eq(s.studentAidRecords.aidType, a.aidType),
-                eq(s.studentAidRecords.aidNumber, a.aidNumber || ""),
-              ),
-            );
+            .where(and(...aidConds));
           if (existingA) {
             await tx
               .update(s.studentAidRecords)
@@ -1734,6 +1797,14 @@ export async function deleteStudentDraft(
   draftId: string,
 ) {
   allow(actor, "master");
+  const [existing] = await db
+    .select()
+    .from(s.studentDrafts)
+    .where(and(eq(s.studentDrafts.id, draftId), eq(s.studentDrafts.userId, actor.id)));
+  if (!existing) throw new HttpError(404, "Draft tidak ditemukan");
+  if (existing.status === "FINALIZED") {
+    throw new HttpError(409, "Draf yang sudah difinalisasi tidak dapat dihapus");
+  }
   await db
     .delete(s.studentDrafts)
     .where(and(eq(s.studentDrafts.id, draftId), eq(s.studentDrafts.userId, actor.id)));
@@ -2198,6 +2269,8 @@ export type ImportRowPreview = {
   rowNum: number;
   nis: string;
   nisn: string | null;
+  nik: string | null;
+  familyCardNumber: string | null;
   name: string;
   gender: string;
   birthPlace: string | null;
@@ -2211,6 +2284,55 @@ export type ImportRowPreview = {
   isValid: boolean;
   errors: string[];
 };
+
+export function generateImportPreviewToken(
+  actorId: string,
+  validRows: any[],
+): string {
+  const secret = process.env.AUTH_SECRET || "sdit-at-taqwim-secret-key-default";
+  const contentHash = createHash("sha256")
+    .update(JSON.stringify(validRows))
+    .digest("hex");
+  const expiry = Date.now() + 15 * 60 * 1000; // 15 mins
+  const payloadStr = `${actorId}:${contentHash}:${validRows.length}:${expiry}`;
+  const signature = createHmac("sha256", secret).update(payloadStr).digest("hex");
+  return Buffer.from(`${payloadStr}:${signature}`).toString("base64url");
+}
+
+export function verifyImportPreviewToken(
+  token: string,
+  actorId: string,
+  rows: any[],
+): boolean {
+  try {
+    const secret =
+      process.env.AUTH_SECRET || "sdit-at-taqwim-secret-key-default";
+    const decoded = Buffer.from(token, "base64url").toString("utf-8");
+    const parts = decoded.split(":");
+    if (parts.length !== 5) return false;
+    const [
+      tokenActorId,
+      tokenContentHash,
+      tokenRowCount,
+      tokenExpiryStr,
+      signature,
+    ] = parts;
+    if (tokenActorId !== actorId) return false;
+    const expiry = Number(tokenExpiryStr);
+    if (isNaN(expiry) || expiry < Date.now()) return false;
+    const payloadStr = `${tokenActorId}:${tokenContentHash}:${tokenRowCount}:${tokenExpiryStr}`;
+    const expectedSignature = createHmac("sha256", secret)
+      .update(payloadStr)
+      .digest("hex");
+    if (signature !== expectedSignature) return false;
+    const actualHash = createHash("sha256")
+      .update(JSON.stringify(rows))
+      .digest("hex");
+    return actualHash === tokenContentHash;
+  } catch {
+    return false;
+  }
+}
 
 export async function previewStudentImport(
   db: Database,
@@ -2372,14 +2494,9 @@ export async function previewStudentImport(
     } else {
       resolvedClassId = classMap.get(className.toLowerCase()) || null;
       if (!resolvedClassId) {
-        const found = classes.find((c) =>
-          c.name.toLowerCase().includes(className.toLowerCase()),
+        errors.push(
+          `Kelas "${className}" tidak ditemukan pada daftar kelas aktif`,
         );
-        if (found) resolvedClassId = found.id;
-        else
-          errors.push(
-            `Kelas "${className}" tidak ditemukan pada daftar kelas aktif`,
-          );
       }
     }
 
@@ -2387,6 +2504,8 @@ export async function previewStudentImport(
       rowNum,
       nis,
       nisn,
+      nik,
+      familyCardNumber,
       name,
       gender,
       birthPlace,
@@ -2403,12 +2522,7 @@ export async function previewStudentImport(
   }
 
   const validRows = previewRows.filter((r) => r.isValid);
-  const contentHash = createHash("sha256")
-    .update(JSON.stringify(validRows))
-    .digest("hex");
-  const previewToken = createHash("sha256")
-    .update(`import-preview:${actor.id}:${contentHash}:${Date.now()}`)
-    .digest("hex");
+  const previewToken = generateImportPreviewToken(actor.id, validRows);
 
   return {
     previewToken,
@@ -2419,14 +2533,47 @@ export async function previewStudentImport(
   };
 }
 
+export const commitImportSchema = z.object({
+  token: z.string().min(1, "Preview token wajib disertakan"),
+  rows: z
+    .array(
+      z.object({
+        rowNum: z.number().int().positive(),
+        nis: z.string().min(1),
+        nisn: z.string().nullable().optional(),
+        nik: z.string().nullable().optional(),
+        familyCardNumber: z.string().nullable().optional(),
+        name: z.string().min(1),
+        gender: z.string().min(1),
+        birthPlace: z.string().nullable().optional(),
+        birthDate: z.string().nullable().optional(),
+        className: z.string().nullable().optional(),
+        resolvedClassId: z.string().nullable().optional(),
+        fatherName: z.string().nullable().optional(),
+        motherName: z.string().nullable().optional(),
+        guardianPhone: z.string().nullable().optional(),
+        address: z.string().nullable().optional(),
+        isValid: z.boolean().optional(),
+        errors: z.array(z.string()).optional(),
+      }),
+    )
+    .min(1, "Data baris import tidak boleh kosong"),
+});
+
 export async function commitStudentImport(
   db: Database,
   ctx: Context,
-  validRows: ImportRowPreview[],
+  input: unknown,
 ) {
   allow(ctx.actor, "master");
-  if (!validRows || validRows.length === 0) {
-    throw new HttpError(400, "Tidak ada baris data valid untuk diimpor");
+  const parsed = commitImportSchema.parse(input);
+
+  if (!verifyImportPreviewToken(parsed.token, ctx.actor.id, parsed.rows)) {
+    throw new HttpError(
+      403,
+      "Token preview import tidak valid, telah kedaluwarsa, atau tidak cocok dengan data",
+      "INVALID_PREVIEW_TOKEN",
+    );
   }
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -2436,7 +2583,8 @@ export async function commitStudentImport(
     const createdIds: string[] = [];
     const errors: Array<{ rowNum: number; message: string }> = [];
 
-    for (const row of validRows) {
+    for (let i = 0; i < parsed.rows.length; i++) {
+      const row = parsed.rows[i];
       if (!row.resolvedClassId) {
         errors.push({
           rowNum: row.rowNum,
@@ -2445,7 +2593,9 @@ export async function commitStudentImport(
         continue;
       }
 
-      await tx.execute(sql.raw(`SAVEPOINT sp_${row.rowNum}`));
+      // Safe server-generated savepoint identifier (eliminates raw client input in SQL)
+      const spName = `sp_imp_${i}`;
+      await tx.execute(sql.raw(`SAVEPOINT ${spName}`));
       try {
         // Re-check NIS uniqueness
         const [existing] = await tx
@@ -2467,7 +2617,9 @@ export async function commitStudentImport(
             name: row.name,
             nis: row.nis,
             nisn: row.nisn,
-            gender: row.gender as "L" | "P",
+            nik: row.nik || null,
+            familyCardNumber: row.familyCardNumber || null,
+            gender: row.gender === "P" ? "P" : "L",
             birthPlace: row.birthPlace,
             birthDate: row.birthDate,
             classId: row.resolvedClassId,
@@ -2514,6 +2666,7 @@ export async function commitStudentImport(
             relationshipType: "FATHER",
             isPrimaryContact: true,
             isPaymentResponsible: true,
+            isEmergencyContact: false,
           });
         }
 
@@ -2534,14 +2687,15 @@ export async function commitStudentImport(
             relationshipType: "MOTHER",
             isPrimaryContact: !row.fatherName,
             isPaymentResponsible: !row.fatherName,
+            isEmergencyContact: false,
           });
         }
 
-        await tx.execute(sql.raw(`RELEASE SAVEPOINT sp_${row.rowNum}`));
+        await tx.execute(sql.raw(`RELEASE SAVEPOINT ${spName}`));
         createdIds.push(student.id);
         createdCount++;
       } catch (err: any) {
-        await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT sp_${row.rowNum}`));
+        await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${spName}`));
         errors.push({
           rowNum: row.rowNum,
           message: err?.message || "Gagal mengimpor siswa",
@@ -2550,7 +2704,7 @@ export async function commitStudentImport(
     }
 
     await audit(tx, ctx, "IMPORT", "students", undefined, undefined, {
-      total: validRows.length,
+      total: parsed.rows.length,
       createdCount,
       failedCount: errors.length,
     });
@@ -2559,7 +2713,7 @@ export async function commitStudentImport(
       success: true,
       createdCount,
       failedCount: errors.length,
-      skippedCount: validRows.length - createdCount - errors.length,
+      skippedCount: parsed.rows.length - createdCount - errors.length,
       createdIds,
       errors,
     };
@@ -2614,19 +2768,119 @@ export async function getStudentsCompletenessSummary(
       ? db.select().from(s.students).where(eq(s.students.classId, classId))
       : db.select().from(s.students);
     const allStudents = await studentQuery;
+    if (allStudents.length === 0) return {};
+
+    const studentIds = allStudents.map((st) => st.id);
+
+    // Bulk query all sections without N+1
+    const [addresses, family, health, aid, chars, docs] = await Promise.all([
+      db
+        .select()
+        .from(s.studentAddresses)
+        .where(inArray(s.studentAddresses.studentId, studentIds)),
+      db
+        .select({
+          studentId: s.studentFamilyMembers.studentId,
+          relationshipType: s.studentFamilyMembers.relationshipType,
+          isPrimaryContact: s.studentFamilyMembers.isPrimaryContact,
+          isPaymentResponsible: s.studentFamilyMembers.isPaymentResponsible,
+          isEmergencyContact: s.studentFamilyMembers.isEmergencyContact,
+          fullName: s.familyMembers.fullName,
+          phone: s.familyMembers.phone,
+          lifeStatus: s.familyMembers.lifeStatus,
+        })
+        .from(s.studentFamilyMembers)
+        .leftJoin(
+          s.familyMembers,
+          eq(s.studentFamilyMembers.familyMemberId, s.familyMembers.id),
+        )
+        .where(inArray(s.studentFamilyMembers.studentId, studentIds)),
+      db
+        .select()
+        .from(s.studentHealthProfiles)
+        .where(inArray(s.studentHealthProfiles.studentId, studentIds)),
+      db
+        .select()
+        .from(s.studentAidRecords)
+        .where(inArray(s.studentAidRecords.studentId, studentIds)),
+      db
+        .select()
+        .from(s.characteristicSubmissions)
+        .where(inArray(s.characteristicSubmissions.studentId, studentIds)),
+      db
+        .select()
+        .from(s.studentDocuments)
+        .where(inArray(s.studentDocuments.studentId, studentIds)),
+    ]);
+
+    const addrMap = new Map<string, any[]>();
+    for (const a of addresses) {
+      if (!addrMap.has(a.studentId)) addrMap.set(a.studentId, []);
+      addrMap.get(a.studentId)!.push(a);
+    }
+
+    const familyMap = new Map<string, any[]>();
+    for (const f of family) {
+      if (!familyMap.has(f.studentId)) familyMap.set(f.studentId, []);
+      familyMap.get(f.studentId)!.push(f);
+    }
+
+    const healthMap = new Map<string, any>();
+    for (const h of health) {
+      healthMap.set(h.studentId, h);
+    }
+
+    const aidMap = new Map<string, any[]>();
+    for (const a of aid) {
+      if (!aidMap.has(a.studentId)) aidMap.set(a.studentId, []);
+      aidMap.get(a.studentId)!.push(a);
+    }
+
+    const charMap = new Map<string, any>();
+    for (const c of chars) {
+      charMap.set(c.studentId, c);
+    }
+
+    const docMap = new Map<string, any[]>();
+    for (const d of docs) {
+      if (!docMap.has(d.studentId)) docMap.set(d.studentId, []);
+      docMap.get(d.studentId)!.push(d);
+    }
 
     const summaryMap: Record<
       string,
       { percentage: number; isComplete: boolean; missingCount: number }
     > = {};
     for (const st of allStudents) {
+      const studentFamily = familyMap.get(st.id) || [];
+      const father = studentFamily.find((f) => f.relationshipType === "FATHER");
+      const mother = studentFamily.find((f) => f.relationshipType === "MOTHER");
+      const emergency = studentFamily.find((f) => f.isEmergencyContact);
+
       const comp = calculateStudentCompleteness({
         student: st,
         registration: {
           classId: st.classId,
           enrolledOn: st.enrolledOn,
         },
+        addresses: addrMap.get(st.id) || [],
+        father: father
+          ? { fullName: father.fullName, lifeStatus: father.lifeStatus }
+          : undefined,
+        mother: mother
+          ? { fullName: mother.fullName, lifeStatus: mother.lifeStatus }
+          : undefined,
+        emergencyContact: emergency
+          ? { name: emergency.fullName, phone: emergency.phone }
+          : undefined,
+        health: healthMap.get(st.id),
+        aidRecords: aidMap.get(st.id) || [],
+        characteristic: charMap.has(st.id)
+          ? { status: "FILLED" }
+          : { status: "EMPTY" },
+        documents: docMap.get(st.id) || [],
       });
+
       summaryMap[st.id] = {
         percentage: comp.percentage,
         isComplete: comp.isComplete,

@@ -165,8 +165,14 @@ export function StudentDetailView({
   const documents = profile.documents || [];
   const completeness = profile.completeness;
 
-  const kkAddress = addresses.find((a: any) => a.addressType === "KK") || addresses[0];
-  const domAddress = addresses.find((a: any) => a.addressType === "DOMISILI") || kkAddress;
+  const kkAddress =
+    addresses.find(
+      (a: any) => a.addressType === "IDENTITY" || a.addressType === "KK",
+    ) || addresses[0];
+  const domAddress =
+    addresses.find(
+      (a: any) => a.addressType === "DOMICILE" || a.addressType === "DOMISILI",
+    ) || kkAddress;
 
   const studentExtended = (fullProfile?.student || student) as any;
 

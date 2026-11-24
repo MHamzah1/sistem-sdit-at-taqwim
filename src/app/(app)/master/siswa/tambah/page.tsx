@@ -6,6 +6,89 @@ import { useApp } from "@/src/lib/context/AppContext";
 import { StudentFormView } from "../_components/StudentFormView";
 import { api } from "@/src/lib/api";
 
+export function normalizeDraftData(data: any) {
+  if (!data) return null;
+  // Convert addresses object to array if needed
+  let addresses = data.addresses;
+  if (addresses && !Array.isArray(addresses)) {
+    addresses = [];
+    if (data.addresses.identity) {
+      addresses.push({ addressType: "IDENTITY", ...data.addresses.identity });
+    }
+    if (data.addresses.domicile) {
+      addresses.push({ addressType: "DOMICILE", ...data.addresses.domicile });
+    }
+  }
+
+  // Convert family object to array if needed
+  let family = data.family;
+  if (family && !Array.isArray(family)) {
+    family = [];
+    if (data.family.father?.name || data.family.father?.fullName) {
+      family.push({
+        relationshipType: "FATHER",
+        isPrimaryContact: data.family.primaryContact === "FATHER",
+        isPaymentResponsible: data.family.paymentResponsible === "FATHER",
+        isEmergencyContact: false,
+        member: {
+          id: data.family.father.id,
+          fullName: data.family.father.name || data.family.father.fullName,
+          ...data.family.father,
+        },
+      });
+    }
+    if (data.family.mother?.name || data.family.mother?.fullName) {
+      family.push({
+        relationshipType: "MOTHER",
+        isPrimaryContact: data.family.primaryContact === "MOTHER",
+        isPaymentResponsible: data.family.paymentResponsible === "MOTHER",
+        isEmergencyContact: false,
+        member: {
+          id: data.family.mother.id,
+          fullName: data.family.mother.name || data.family.mother.fullName,
+          ...data.family.mother,
+        },
+      });
+    }
+    if (data.family.guardian?.name || data.family.guardian?.fullName) {
+      family.push({
+        relationshipType: data.family.guardianRelationship || "OTHER_GUARDIAN",
+        isPrimaryContact: data.family.primaryContact === "GUARDIAN",
+        isPaymentResponsible: data.family.paymentResponsible === "GUARDIAN",
+        isEmergencyContact: false,
+        member: {
+          id: data.family.guardian.id,
+          fullName: data.family.guardian.name || data.family.guardian.fullName,
+          ...data.family.guardian,
+        },
+      });
+    }
+    if (data.family.emergencyContact?.name) {
+      family.push({
+        relationshipType:
+          data.family.emergencyContact.relationship || "OTHER_GUARDIAN",
+        isPrimaryContact: false,
+        isPaymentResponsible: false,
+        isEmergencyContact: true,
+        member: {
+          fullName: data.family.emergencyContact.name,
+          phone: data.family.emergencyContact.phone,
+        },
+      });
+    }
+  }
+
+  return {
+    ...data,
+    addresses: addresses || [],
+    family: family || [],
+    health: data.health || null,
+    aidRecords: data.aidRecords || data.aid || [],
+    measurements: data.measurements || [],
+    documents: data.documents || [],
+  };
+}
+
 export default function TambahSiswaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,7 +111,7 @@ export default function TambahSiswaPage() {
           router.replace(`/master/siswa/${draft.finalStudentId}`);
           return;
         }
-        setDraftProfile(draft.data);
+        setDraftProfile(normalizeDraftData(draft.data));
         setActiveDraftId(draft.id);
       })
       .catch((err) => {

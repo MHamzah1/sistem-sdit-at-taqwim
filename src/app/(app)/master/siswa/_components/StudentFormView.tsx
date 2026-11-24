@@ -161,8 +161,20 @@ export function StudentFormView({
   );
 
   // --- Section 02: Alamat & Domisili ---
-  const idAddr = initialFullProfile?.addresses?.find((a: any) => a.addressType === "IDENTITY");
-  const domAddr = initialFullProfile?.addresses?.find((a: any) => a.addressType === "DOMICILE");
+  const addressList: any[] = Array.isArray(initialFullProfile?.addresses)
+    ? initialFullProfile.addresses
+    : initialFullProfile?.addresses
+      ? [
+          ...(initialFullProfile.addresses.identity
+            ? [{ addressType: "IDENTITY", ...initialFullProfile.addresses.identity }]
+            : []),
+          ...(initialFullProfile.addresses.domicile
+            ? [{ addressType: "DOMICILE", ...initialFullProfile.addresses.domicile }]
+            : []),
+        ]
+      : [];
+  const idAddr = addressList.find((a: any) => a.addressType === "IDENTITY");
+  const domAddr = addressList.find((a: any) => a.addressType === "DOMICILE");
 
   const [idAddress, setIdAddress] = useState(idAddr?.address || "");
   const [idRt, setIdRt] = useState(idAddr?.rt || "");
@@ -239,17 +251,20 @@ export function StudentFormView({
   const [academicNotes, setAcademicNotes] = useState(initialEnrollment?.notes || "");
 
   // --- Section 04 & 05: Data Ayah & Ibu ---
-  const fatherRel = initialFullProfile?.family?.find(
+  const familyList: any[] = Array.isArray(initialFullProfile?.family)
+    ? initialFullProfile.family
+    : [];
+  const fatherRel = familyList.find(
     (f: any) => f.relationshipType === "FATHER",
   );
-  const motherRel = initialFullProfile?.family?.find(
+  const motherRel = familyList.find(
     (f: any) => f.relationshipType === "MOTHER",
   );
-  const guardianRel = initialFullProfile?.family?.find(
+  const guardianRel = familyList.find(
     (f: any) =>
-      f.relationshipType !== "FATHER" && f.relationshipType !== "MOTHER",
+      f.relationshipType !== "FATHER" && f.relationshipType !== "MOTHER" && !f.isEmergencyContact,
   );
-  const emergencyRel = initialFullProfile?.family?.find(
+  const emergencyRel = familyList.find(
     (f: any) => f.isEmergencyContact,
   );
 
@@ -442,10 +457,44 @@ export function StudentFormView({
 
         if (ctx) {
           ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-          const compressed = canvas.toDataURL("image/jpeg", 0.85);
-          setPhotoUrl(compressed);
+          canvas.toBlob(
+            async (blob) => {
+              if (!blob) {
+                setPhotoError("Gagal memproses gambar");
+                setIsProcessingPhoto(false);
+                return;
+              }
+              try {
+                const ext = "jpg";
+                const photoFile = new File(
+                  [blob],
+                  `pas-foto-${Date.now()}.${ext}`,
+                  { type: "image/jpeg" },
+                );
+                const uploaded = await upload(
+                  `student-documents/${currentUserId || "actor"}/${crypto.randomUUID()}.${ext}`,
+                  photoFile,
+                  {
+                    access: "private",
+                    handleUploadUrl: "/api/files/upload",
+                    contentType: "image/jpeg",
+                  },
+                );
+                setPhotoUrl(uploaded.pathname);
+              } catch {
+                // Fallback to data URL so cropped photo is preserved if upload service is offline/dev
+                const compressed = canvas.toDataURL("image/jpeg", 0.85);
+                setPhotoUrl(compressed);
+              } finally {
+                setIsProcessingPhoto(false);
+              }
+            },
+            "image/jpeg",
+            0.85,
+          );
+        } else {
+          setIsProcessingPhoto(false);
         }
-        setIsProcessingPhoto(false);
       };
       img.src = e.target?.result as string;
     };
@@ -666,18 +715,26 @@ export function StudentFormView({
         assistanceNeeds: assistanceNeeds.trim() || null,
       },
       aid: aidRecords.map((a) => ({
+        id: a.id || undefined,
         aidType: a.aidType,
         aidNumber: a.aidNumber || null,
         aidSource: a.aidSource || null,
+        startDate: a.startDate || null,
+        endDate: a.endDate || null,
+        amount: a.amount ? Number(a.amount) : null,
         status: a.status || "ACTIVE",
         notes: a.notes || null,
       })),
       measurements: measurements.map((m) => ({
+        id: m.id || undefined,
         academicYearId: m.academicYearId || undefined,
         semester: Number(m.semester) || 1,
         measurementDate: m.measurementDate,
         heightCm: Number(m.heightCm),
         weightKg: Number(m.weightKg),
+        headCircumferenceCm: m.headCircumferenceCm
+          ? Number(m.headCircumferenceCm)
+          : null,
         notes: m.notes || null,
       })),
       documents: documents.map((d) => ({
