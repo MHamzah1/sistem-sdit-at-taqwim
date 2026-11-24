@@ -28,14 +28,51 @@ import {
   Eye,
   Check,
   ChevronRight,
+  ChevronLeft,
   Plus,
   HelpCircle,
+  Sparkles,
+  Info,
 } from "lucide-react";
 import type { AppState } from "@/server/state";
 import { calculateAge, money } from "@/src/lib/formatters";
 import { Badge } from "@/src/components/Badge";
 import { Modal } from "@/src/components/Modal";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/src/components/ui/card";
+import { Button } from "@/src/components/ui/button";
+import { Input } from "@/src/components/ui/input";
+import { Select } from "@/src/components/ui/select";
+import { Textarea } from "@/src/components/ui/textarea";
+import { Badge as UiBadge } from "@/src/components/ui/badge";
+import { cn } from "@/src/lib/utils";
 import { api } from "@/src/lib/api";
+
+interface FormFieldProps {
+  label: string;
+  required?: boolean;
+  helperText?: string;
+  error?: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
+function FormField({ label, required, helperText, error, children, className }: FormFieldProps) {
+  return (
+    <div className={cn("space-y-1.5 text-left", className)}>
+      <label className="block text-xs font-semibold text-foreground">
+        {label}
+        {required && <span className="text-destructive ml-1">*</span>}
+      </label>
+      {children}
+      {helperText && !error && (
+        <p className="text-[11px] text-muted-foreground leading-normal">{helperText}</p>
+      )}
+      {error && (
+        <p className="text-[11px] text-destructive font-medium leading-normal">{error}</p>
+      )}
+    </div>
+  );
+}
 
 type Student = AppState["students"][number];
 type ClassItem = AppState["classes"][number];
@@ -598,75 +635,77 @@ export function StudentFormView({
   return (
     <div className="st-page-shell">
       {/* Header Card */}
-      <div className="st-header-card" style={{ marginBottom: 16 }}>
-        <div className="st-header-left">
-          <div className="st-header-icon-box">
-            <Users size={28} />
-          </div>
-          <div>
-            <div className="st-breadcrumb">
-              <span>Master Data</span>
-              <span>/</span>
-              <span>Siswa</span>
-              <span>/</span>
-              <span>{mode === "tambah" ? "Tambah Siswa Baru" : "Ubah Data Siswa"}</span>
+      <Card className="border border-border/80 shadow-xs mb-6 overflow-hidden">
+        <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 bg-card">
+          <div className="flex items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-2xs">
+              <Users className="size-6" />
             </div>
-            <h1 className="st-header-title">
-              {mode === "tambah" ? "Pendaftaran & Biodata Siswa Baru" : `Ubah Biodata: ${name || student?.name}`}
-            </h1>
-            <p className="st-header-subtitle">
-              Lengkapi 10 bagian informasi administrasi dan data induk siswa SDIT AT-TAQWIM.
-            </p>
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5 font-medium">
+                <span>Master Data</span>
+                <span>/</span>
+                <span>Siswa</span>
+                <span>/</span>
+                <span className="text-foreground font-semibold">
+                  {mode === "tambah" ? "Tambah Siswa Baru" : "Ubah Data Siswa"}
+                </span>
+              </div>
+              <h1 className="text-xl md:text-2xl font-bold font-heading text-foreground tracking-tight">
+                {mode === "tambah" ? "Pendaftaran & Biodata Siswa Baru" : `Ubah Biodata: ${name || student?.name}`}
+              </h1>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                Lengkapi 10 bagian informasi administrasi dan data induk siswa SDIT AT-TAQWIM.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="st-header-actions" style={{ alignItems: "flex-end" }}>
-          <div style={{ textAlign: "right", minWidth: 220 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "#16613e", marginBottom: 5 }}>
-              <span>Kelengkapan Biodata</span>
-              <span>{completeness.pct}%</span>
-            </div>
-            <div style={{ height: 8, background: "#e1e7e3", borderRadius: 4, overflow: "hidden" }}>
-              <div
-                style={{
-                  height: "100%",
-                  width: `${completeness.pct}%`,
-                  background: completeness.pct >= 80 ? "#10b981" : "#f59e0b",
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </div>
-            <div style={{ fontSize: 10, color: "#6c7971", marginTop: 4 }}>
-              Dokumen: {documents.filter((d) => d.verificationStatus === "VERIFIED").length}/{documents.length || 3} Terverifikasi
+          <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end justify-between md:justify-center gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-border/60 min-w-[220px]">
+            <div className="w-full space-y-1.5">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-semibold text-foreground">Kelengkapan Biodata</span>
+                <UiBadge
+                  variant={completeness.pct >= 80 ? "success" : "warning"}
+                  className="font-bold text-[11px] px-2 py-0.5"
+                >
+                  {completeness.pct}%
+                </UiBadge>
+              </div>
+              <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full transition-all duration-300 rounded-full",
+                    completeness.pct >= 80 ? "bg-emerald-600" : "bg-amber-500"
+                  )}
+                  style={{ width: `${completeness.pct}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                <span className="inline-flex items-center gap-1">
+                  <FileText className="size-3 text-primary" />
+                  Dokumen: {documents.filter((d) => d.verificationStatus === "VERIFIED").length}/{documents.length || 3} Terverifikasi
+                </span>
+                <span>{completeness.pct >= 100 ? "Lengkap" : "Perlu Dilengkapi"}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Main Form 2-Panel Layout */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "260px minmax(0, 1fr)",
-          gap: 18,
-          alignItems: "start",
-        }}
-        className="st-form-2panel"
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
         {/* Left Sidebar Nav */}
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e1e7e3",
-            borderRadius: 10,
-            padding: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 750, color: "#154d35", padding: "6px 8px 10px", borderBottom: "1px solid #edf0ed" }}>
-            BAGIAN FORMULIR
+        <Card className="p-3 border border-border/80 shadow-xs lg:sticky lg:top-20 space-y-3">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
+              Bagian Formulir
+            </span>
+            <span className="text-[11px] font-semibold text-muted-foreground">
+              {activeSection}/10
+            </span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 8 }}>
+
+          <div className="space-y-1">
             {sectionsList.map((sec) => {
               const Icon = sec.icon;
               const isActive = activeSection === sec.id;
@@ -675,30 +714,28 @@ export function StudentFormView({
                   key={sec.id}
                   type="button"
                   onClick={() => setActiveSection(sec.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "9px 10px",
-                    borderRadius: 6,
-                    textAlign: "left",
-                    background: isActive ? "#e8f2ec" : "transparent",
-                    color: isActive ? "#154d35" : "#536448",
-                    fontWeight: isActive ? 750 : 500,
-                    fontSize: 12,
-                    border: 0,
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
-                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all text-left group",
+                    isActive
+                      ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
+                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                  )}
                 >
-                  <Icon size={16} color={isActive ? "#16613e" : "#87918c"} />
-                  <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <Icon
+                    className={cn(
+                      "size-4 shrink-0 transition-colors",
+                      isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                    )}
+                  />
+                  <span className="flex-1 truncate">
                     {sec.title}
                   </span>
                   {sec.complete ? (
-                    <CheckCircle2 size={14} color="#10b981" />
+                    <CheckCircle2 className="size-4 text-emerald-600 shrink-0 ml-1" />
+                  ) : isActive ? (
+                    <span className="size-2 rounded-full bg-primary shrink-0 ml-1 animate-pulse" />
                   ) : (
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
+                    <span className="size-1.5 rounded-full bg-amber-500/80 shrink-0 ml-1" />
                   )}
                 </button>
               );
@@ -706,352 +743,279 @@ export function StudentFormView({
           </div>
 
           {/* Draft Note */}
-          <div
-            style={{
-              marginTop: 16,
-              padding: 10,
-              background: "#f7f9f7",
-              border: "1px solid #e9eeea",
-              borderRadius: 6,
-              fontSize: 11,
-              color: "#536448",
-            }}
-          >
-            <strong>Simpan Sementara</strong>
-            <p style={{ margin: "4px 0 0", fontSize: 10, color: "#7a8c6d", lineHeight: 1.4 }}>
+          <div className="p-3 rounded-lg border border-border/60 bg-muted/40 text-left space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <HelpCircle className="size-3.5 text-primary" />
+              <span>Simpan Sementara</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               Draf tidak menghasilkan tagihan SPP atau kartu ujian sebelum difinalisasi.
             </p>
           </div>
-        </div>
+        </Card>
 
         {/* Right Active Section Content */}
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e1e7e3",
-            borderRadius: 10,
-            padding: 24,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-          }}
-        >
-          <form onSubmit={handleFinalSubmit}>
+        <Card className="border border-border/80 shadow-xs overflow-hidden">
+          <div className="p-6 md:p-8">
+            <form onSubmit={handleFinalSubmit}>
             {/* SECTION 01: Identitas Siswa */}
             {activeSection === 1 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35", marginBottom: 4 }}>
-                  01. Identitas Siswa
-                </h3>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Isi data identitas siswa sesuai dengan Kartu Keluarga dan Akta Kelahiran.
-                </p>
+              <div className="space-y-6">
+                <div className="space-y-1 pb-4 border-b border-border/60">
+                  <h2 className="text-lg font-bold font-heading text-foreground">
+                    01. Identitas Siswa
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Isi data identitas siswa sesuai dengan Kartu Keluarga dan Akta Kelahiran.
+                  </p>
+                </div>
 
                 {/* Pas Foto Upload & Preview */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 18,
-                    padding: 16,
-                    background: "#f7f9f7",
-                    border: "1px solid #e7ece8",
-                    borderRadius: 8,
-                    marginBottom: 20,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 90,
-                      height: 120,
-                      borderRadius: 6,
-                      background: "#eef2ee",
-                      border: "1px dashed #c0ccc4",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      overflow: "hidden",
-                      position: "relative",
-                    }}
-                  >
-                    {photoUrl ? (
-                      <img
-                        src={photoUrl}
-                        alt="Pas Foto 3x4"
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    ) : (
-                      <div style={{ textAlign: "center", color: "#87918c", fontSize: 10 }}>
-                        <Users size={28} style={{ margin: "0 auto 4px" }} />
-                        <span>Foto 3×4</span>
+                <Card className="border border-border/70 bg-muted/20 shadow-none">
+                  <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-center sm:items-start gap-5">
+                    <div className="w-[96px] h-[128px] rounded-lg bg-card border-2 border-dashed border-border flex flex-col items-center justify-center overflow-hidden shrink-0 shadow-2xs relative group">
+                      {photoUrl ? (
+                        <img
+                          src={photoUrl}
+                          alt="Pas Foto 3x4"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center text-muted-foreground p-2">
+                          <Users className="size-7 mx-auto mb-1 text-muted-foreground/60" />
+                          <span className="text-[10px] font-semibold">Foto 3×4</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 text-center sm:text-left space-y-2">
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground">Pas Foto Siswa (Rasio 3:4)</h4>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                          Format JPG, PNG, atau WEBP. Ukuran maksimal 5 MB. Foto digunakan untuk kartu ujian ber-QR.
+                        </p>
                       </div>
-                    )}
-                  </div>
 
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#283b34", marginBottom: 4 }}>
-                      Pas Foto Siswa (Rasio 3:4)
-                    </div>
-                    <div style={{ fontSize: 11, color: "#6c7971", marginBottom: 10 }}>
-                      Format JPG, PNG, atau WEBP. Ukuran maksimal 5 MB. Foto digunakan untuk kartu ujian ber-QR.
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="image/jpeg,image/png,image/webp"
-                        style={{ display: "none" }}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handlePhotoSelect(f);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="st-btn-secondary"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isProcessingPhoto}
-                        style={{ fontSize: 11, padding: "6px 12px" }}
-                      >
-                        <Upload size={14} style={{ marginRight: 6 }} />
-                        {photoUrl ? "Ganti Foto" : "Pilih Foto"}
-                      </button>
-                      {photoUrl && (
-                        <button
+                      <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handlePhotoSelect(f);
+                          }}
+                        />
+                        <Button
                           type="button"
-                          className="st-btn-secondary"
-                          onClick={() => setPhotoUrl("")}
-                          style={{ fontSize: 11, padding: "6px 12px", color: "#dc2626" }}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isProcessingPhoto}
                         >
-                          <Trash2 size={14} style={{ marginRight: 6 }} />
-                          Hapus
-                        </button>
+                          <Upload className="size-3.5 mr-1.5" />
+                          {photoUrl ? "Ganti Foto" : "Pilih Foto"}
+                        </Button>
+                        {photoUrl && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPhotoUrl("")}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="size-3.5 mr-1.5" />
+                            Hapus
+                          </Button>
+                        )}
+                      </div>
+                      {photoError && (
+                        <p className="text-[11px] text-destructive font-medium">{photoError}</p>
                       )}
                     </div>
-                    {photoError && (
-                      <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{photoError}</div>
-                    )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nama Lengkap Siswa *
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Sesuai dokumen Kartu Keluarga"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nama Panggilan
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={nickname}
-                      onChange={(e) => setNickname(e.target.value)}
-                      placeholder="Contoh: Fauzi"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      NIS (Nomor Induk Siswa) *
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={nis}
-                      onChange={(e) => setNis(e.target.value)}
-                      placeholder="Nomor induk unik sekolah"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      NISN (Nomor Induk Siswa Nasional)
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={nisn}
-                      maxLength={10}
-                      onChange={(e) => setNisn(e.target.value.replace(/\D/g, ""))}
-                      placeholder="10 digit angka jika sudah ada"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      NIK (Nomor Induk Kependudukan)
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={nik}
-                      maxLength={16}
-                      onChange={(e) => setNik(e.target.value.replace(/\D/g, ""))}
-                      placeholder="16 digit angka sesuai KK/KIA"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nomor Kartu Keluarga (KK)
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={familyCardNumber}
-                      maxLength={16}
-                      onChange={(e) => setFamilyCardNumber(e.target.value.replace(/\D/g, ""))}
-                      placeholder="16 digit angka kepala keluarga"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nomor Akta Kelahiran
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={birthCertificateNumber}
-                      onChange={(e) => setBirthCertificateNumber(e.target.value)}
-                      placeholder="Nomor register akta kelahiran"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Jenis Kelamin
-                    </label>
-                    <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                        <input
-                          type="radio"
-                          name="gender"
-                          checked={gender === "L"}
-                          onChange={() => setGender("L")}
-                        />
-                        Laki-laki
-                      </label>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                        <input
-                          type="radio"
-                          name="gender"
-                          checked={gender === "P"}
-                          onChange={() => setGender("P")}
-                        />
-                        Perempuan
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Tempat Lahir
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={birthPlace}
-                      onChange={(e) => setBirthPlace(e.target.value)}
-                      placeholder="Contoh: Bogor"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Tanggal Lahir
-                    </label>
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <input
-                        type="date"
-                        className="st-input"
-                        value={birthDate}
-                        onChange={(e) => setBirthDate(e.target.value)}
-                        max={todayStr}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Nama Lengkap Siswa" required>
+                      <Input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Sesuai dokumen Kartu Keluarga"
+                        required
                       />
-                      {birthDate && (
-                        <span style={{ fontSize: 11, color: "#16613e", fontWeight: 600, whiteSpace: "nowrap" }}>
-                          Usia: {calculateAge(birthDate)}
-                        </span>
-                      )}
-                    </div>
+                    </FormField>
+                    <FormField label="Nama Panggilan">
+                      <Input
+                        type="text"
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        placeholder="Contoh: Fauzi"
+                      />
+                    </FormField>
                   </div>
-                </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Agama
-                    </label>
-                    <select
-                      className="st-input"
-                      value={religion}
-                      onChange={(e) => setReligion(e.target.value)}
-                    >
-                      <option value="Islam">Islam</option>
-                      <option value="Kristen">Kristen</option>
-                      <option value="Katolik">Katolik</option>
-                      <option value="Hindu">Hindu</option>
-                      <option value="Buddha">Buddha</option>
-                      <option value="Konghucu">Konghucu</option>
-                    </select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="NIS (Nomor Induk Siswa)" required>
+                      <Input
+                        type="text"
+                        value={nis}
+                        onChange={(e) => setNis(e.target.value)}
+                        placeholder="Nomor induk unik sekolah"
+                        required
+                      />
+                    </FormField>
+                    <FormField label="NISN (Nomor Induk Siswa Nasional)">
+                      <Input
+                        type="text"
+                        value={nisn}
+                        maxLength={10}
+                        onChange={(e) => setNisn(e.target.value.replace(/\D/g, ""))}
+                        placeholder="10 digit angka jika sudah ada"
+                      />
+                    </FormField>
                   </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Kewarganegaraan
-                    </label>
-                    <select
-                      className="st-input"
-                      value={citizenship}
-                      onChange={(e) => setCitizenship(e.target.value)}
-                    >
-                      <option value="WNI">WNI (Warga Negara Indonesia)</option>
-                      <option value="WNA">WNA (Warga Negara Asing)</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Anak ke-
-                    </label>
-                    <input
-                      type="number"
-                      className="st-input"
-                      min={1}
-                      value={birthOrder}
-                      onChange={(e) => setBirthOrder(e.target.value === "" ? "" : Number(e.target.value))}
-                      placeholder="1"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="NIK (Nomor Induk Kependudukan)">
+                      <Input
+                        type="text"
+                        value={nik}
+                        maxLength={16}
+                        onChange={(e) => setNik(e.target.value.replace(/\D/g, ""))}
+                        placeholder="16 digit angka sesuai KK/KIA"
+                      />
+                    </FormField>
+                    <FormField label="Nomor Kartu Keluarga (KK)">
+                      <Input
+                        type="text"
+                        value={familyCardNumber}
+                        maxLength={16}
+                        onChange={(e) => setFamilyCardNumber(e.target.value.replace(/\D/g, ""))}
+                        placeholder="16 digit angka kepala keluarga"
+                      />
+                    </FormField>
                   </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Jumlah Saudara Kandung
-                    </label>
-                    <input
-                      type="number"
-                      className="st-input"
-                      min={0}
-                      value={siblingCount}
-                      onChange={(e) => setSiblingCount(e.target.value === "" ? "" : Number(e.target.value))}
-                      placeholder="0"
-                    />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Nomor Akta Kelahiran">
+                      <Input
+                        type="text"
+                        value={birthCertificateNumber}
+                        onChange={(e) => setBirthCertificateNumber(e.target.value)}
+                        placeholder="Nomor register akta kelahiran"
+                      />
+                    </FormField>
+                    <FormField label="Jenis Kelamin">
+                      <div className="grid grid-cols-2 gap-3 h-10 items-center">
+                        <label className={cn(
+                          "flex items-center justify-center gap-2 h-10 px-3 rounded-lg border text-xs font-semibold cursor-pointer transition-all",
+                          gender === "L"
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "bg-card border-input text-foreground hover:bg-muted"
+                        )}>
+                          <input
+                            type="radio"
+                            name="gender"
+                            className="hidden"
+                            checked={gender === "L"}
+                            onChange={() => setGender("L")}
+                          />
+                          <span>Laki-laki</span>
+                        </label>
+                        <label className={cn(
+                          "flex items-center justify-center gap-2 h-10 px-3 rounded-lg border text-xs font-semibold cursor-pointer transition-all",
+                          gender === "P"
+                            ? "bg-primary/10 border-primary text-primary"
+                            : "bg-card border-input text-foreground hover:bg-muted"
+                        )}>
+                          <input
+                            type="radio"
+                            name="gender"
+                            className="hidden"
+                            checked={gender === "P"}
+                            onChange={() => setGender("P")}
+                          />
+                          <span>Perempuan</span>
+                        </label>
+                      </div>
+                    </FormField>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Tempat Lahir">
+                      <Input
+                        type="text"
+                        value={birthPlace}
+                        onChange={(e) => setBirthPlace(e.target.value)}
+                        placeholder="Contoh: Bogor"
+                      />
+                    </FormField>
+                    <FormField label="Tanggal Lahir">
+                      <div className="flex items-center gap-2.5">
+                        <Input
+                          type="date"
+                          value={birthDate}
+                          onChange={(e) => setBirthDate(e.target.value)}
+                          max={todayStr}
+                          className="flex-1"
+                        />
+                        {birthDate && (
+                          <UiBadge variant="neutral" className="shrink-0 h-10 px-3 text-xs">
+                            Usia: {calculateAge(birthDate)}
+                          </UiBadge>
+                        )}
+                      </div>
+                    </FormField>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Agama">
+                      <Select
+                        value={religion}
+                        onChange={(e) => setReligion(e.target.value)}
+                      >
+                        <option value="Islam">Islam</option>
+                        <option value="Kristen">Kristen</option>
+                        <option value="Katolik">Katolik</option>
+                        <option value="Hindu">Hindu</option>
+                        <option value="Buddha">Buddha</option>
+                        <option value="Konghucu">Konghucu</option>
+                      </Select>
+                    </FormField>
+                    <FormField label="Kewarganegaraan">
+                      <Select
+                        value={citizenship}
+                        onChange={(e) => setCitizenship(e.target.value)}
+                      >
+                        <option value="WNI">WNI (Warga Negara Indonesia)</option>
+                        <option value="WNA">WNA (Warga Negara Asing)</option>
+                      </Select>
+                    </FormField>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Anak ke-">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={birthOrder}
+                        onChange={(e) => setBirthOrder(e.target.value === "" ? "" : Number(e.target.value))}
+                        placeholder="1"
+                      />
+                    </FormField>
+                    <FormField label="Jumlah Saudara Kandung">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={siblingCount}
+                        onChange={(e) => setSiblingCount(e.target.value === "" ? "" : Number(e.target.value))}
+                        placeholder="0"
+                      />
+                    </FormField>
                   </div>
                 </div>
               </div>
@@ -1059,1172 +1023,1107 @@ export function StudentFormView({
 
             {/* SECTION 02: Alamat & Domisili */}
             {activeSection === 2 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35", marginBottom: 4 }}>
-                  02. Alamat & Tempat Tinggal
-                </h3>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Kelola alamat kependudukan sesuai Kartu Keluarga serta alamat domisili anak saat ini.
-                </p>
-
-                <div style={{ background: "#f9faf9", border: "1px solid #e9eeea", padding: 16, borderRadius: 8, marginBottom: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35", marginBottom: 12 }}>
-                    ALAMAT SESUAI KARTU KELUARGA (KK)
-                  </div>
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Alamat Jalan / Lingkungan *
-                    </label>
-                    <textarea
-                      rows={2}
-                      className="st-input"
-                      value={idAddress}
-                      onChange={(e) => setIdAddress(e.target.value)}
-                      placeholder="Nama jalan, nomor rumah, gang/blok"
-                    />
-                  </div>
-                  <div className="form-grid" style={{ marginBottom: 12 }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        RT / RW
-                      </label>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input
-                          type="text"
-                          className="st-input"
-                          placeholder="RT"
-                          value={idRt}
-                          onChange={(e) => setIdRt(e.target.value)}
-                        />
-                        <input
-                          type="text"
-                          className="st-input"
-                          placeholder="RW"
-                          value={idRw}
-                          onChange={(e) => setIdRw(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Dusun / Lingkungan
-                      </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={idHamlet}
-                        onChange={(e) => setIdHamlet(e.target.value)}
-                        placeholder="Dusun I"
-                      />
-                    </div>
-                  </div>
-                  <div className="form-grid" style={{ marginBottom: 12 }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Kelurahan / Desa
-                      </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={idVillage}
-                        onChange={(e) => setIdVillage(e.target.value)}
-                        placeholder="Desa Benteng"
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Kecamatan
-                      </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={idDistrict}
-                        onChange={(e) => setIdDistrict(e.target.value)}
-                        placeholder="Kecamatan Ciampea"
-                      />
-                    </div>
-                  </div>
-                  <div className="form-grid">
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Kabupaten / Kota
-                      </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={idRegency}
-                        onChange={(e) => setIdRegency(e.target.value)}
-                        placeholder="Kab. Bogor"
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Kode Pos
-                      </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={idPostalCode}
-                        maxLength={5}
-                        onChange={(e) => setIdPostalCode(e.target.value.replace(/\D/g, ""))}
-                        placeholder="16620"
-                      />
-                    </div>
-                  </div>
+              <div className="space-y-6">
+                <div className="space-y-1 pb-4 border-b border-border/60">
+                  <h2 className="text-lg font-bold font-heading text-foreground">
+                    02. Alamat & Tempat Tinggal
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Kelola alamat kependudukan sesuai Kartu Keluarga serta alamat domisili anak saat ini.
+                  </p>
                 </div>
 
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Alamat Sesuai Kartu Keluarga (KK)
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <FormField label="Alamat Jalan / Lingkungan" required>
+                      <Textarea
+                        rows={2}
+                        value={idAddress}
+                        onChange={(e) => setIdAddress(e.target.value)}
+                        placeholder="Nama jalan, nomor rumah, gang/blok"
+                      />
+                    </FormField>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="RT / RW">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="text"
+                            placeholder="RT (001)"
+                            value={idRt}
+                            onChange={(e) => setIdRt(e.target.value)}
+                          />
+                          <Input
+                            type="text"
+                            placeholder="RW (002)"
+                            value={idRw}
+                            onChange={(e) => setIdRw(e.target.value)}
+                          />
+                        </div>
+                      </FormField>
+                      <FormField label="Dusun / Lingkungan">
+                        <Input
+                          type="text"
+                          value={idHamlet}
+                          onChange={(e) => setIdHamlet(e.target.value)}
+                          placeholder="Dusun I"
+                        />
+                      </FormField>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Kelurahan / Desa">
+                        <Input
+                          type="text"
+                          value={idVillage}
+                          onChange={(e) => setIdVillage(e.target.value)}
+                          placeholder="Desa Benteng"
+                        />
+                      </FormField>
+                      <FormField label="Kecamatan">
+                        <Input
+                          type="text"
+                          value={idDistrict}
+                          onChange={(e) => setIdDistrict(e.target.value)}
+                          placeholder="Kecamatan Ciampea"
+                        />
+                      </FormField>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Kabupaten / Kota">
+                        <Input
+                          type="text"
+                          value={idRegency}
+                          onChange={(e) => setIdRegency(e.target.value)}
+                          placeholder="Kab. Bogor"
+                        />
+                      </FormField>
+                      <FormField label="Kode Pos">
+                        <Input
+                          type="text"
+                          value={idPostalCode}
+                          maxLength={5}
+                          onChange={(e) => setIdPostalCode(e.target.value.replace(/\D/g, ""))}
+                          placeholder="16620"
+                        />
+                      </FormField>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Domicile Checkbox */}
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, fontWeight: 650, color: "#16613e" }}>
+                <div>
+                  <label className="flex items-center gap-3 p-3.5 rounded-lg border border-border/80 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
                     <input
                       type="checkbox"
                       checked={sameAsIdentity}
                       onChange={(e) => setSameAsIdentity(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: "#10b981" }}
+                      className="size-4 rounded border-input text-primary accent-primary focus:ring-primary/20"
                     />
-                    Alamat tempat tinggal / domisili sama persis dengan alamat KK
+                    <span className="text-xs font-semibold text-foreground select-none">
+                      Alamat tempat tinggal / domisili sama persis dengan alamat KK
+                    </span>
                   </label>
                 </div>
 
                 {!sameAsIdentity && (
-                  <div style={{ background: "#fff", border: "1px dashed #c0ccc4", padding: 16, borderRadius: 8, marginBottom: 20 }}>
-                    <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35", marginBottom: 12 }}>
-                      ALAMAT DOMISILI SAAT INI
-                    </div>
-                    <textarea
-                      rows={2}
-                      className="st-input"
-                      value={domAddress}
-                      onChange={(e) => setDomAddress(e.target.value)}
-                      placeholder="Alamat domisili jika berbeda dari KK"
-                      style={{ marginBottom: 12 }}
-                    />
-                    <div className="form-grid">
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={domRegency}
-                        onChange={(e) => setDomRegency(e.target.value)}
-                        placeholder="Kota / Kabupaten Domisili"
-                      />
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={domPostalCode}
-                        maxLength={5}
-                        onChange={(e) => setDomPostalCode(e.target.value.replace(/\D/g, ""))}
-                        placeholder="Kode Pos Domisili"
-                      />
-                    </div>
-                  </div>
+                  <Card className="border border-dashed border-primary/40 bg-card shadow-xs">
+                    <CardHeader className="py-3 px-5 bg-primary/5 border-b border-primary/20">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="size-4 text-primary" />
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                          Alamat Domisili Saat Ini
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-5 space-y-4">
+                      <FormField label="Alamat Domisili">
+                        <Textarea
+                          rows={2}
+                          value={domAddress}
+                          onChange={(e) => setDomAddress(e.target.value)}
+                          placeholder="Alamat domisili jika berbeda dari KK"
+                        />
+                      </FormField>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField label="Kota / Kabupaten Domisili">
+                          <Input
+                            type="text"
+                            value={domRegency}
+                            onChange={(e) => setDomRegency(e.target.value)}
+                            placeholder="Kota / Kabupaten Domisili"
+                          />
+                        </FormField>
+                        <FormField label="Kode Pos Domisili">
+                          <Input
+                            type="text"
+                            value={domPostalCode}
+                            maxLength={5}
+                            onChange={(e) => setDomPostalCode(e.target.value.replace(/\D/g, ""))}
+                            placeholder="Kode Pos Domisili"
+                          />
+                        </FormField>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
 
                 {/* Akses & Transportasi */}
-                <div style={{ background: "#f7f9f7", border: "1px solid #e7ece8", padding: 16, borderRadius: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35", marginBottom: 12 }}>
-                    TEMPAT TINGGAL & AKSES KE SEKOLAH
-                  </div>
-                  <div className="form-grid" style={{ marginBottom: 12 }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Jenis Tempat Tinggal
-                      </label>
-                      <select
-                        className="st-input"
-                        value={residenceType}
-                        onChange={(e) => setResidenceType(e.target.value)}
-                      >
-                        <option value="BERSAMA_ORANG_TUA">Bersama Orang Tua</option>
-                        <option value="BERSAMA_WALI">Bersama Wali</option>
-                        <option value="KOS_ASRAMA">Kost / Asrama</option>
-                        <option value="PANTI_ASUHAN">Panti Asuhan</option>
-                        <option value="LAINNYA">Lainnya</option>
-                      </select>
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <School className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Tempat Tinggal & Akses ke Sekolah
+                      </CardTitle>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Moda Transportasi Utama
-                      </label>
-                      <select
-                        className="st-input"
-                        value={transportationType}
-                        onChange={(e) => setTransportationType(e.target.value)}
-                      >
-                        <option value="JALAN_KAKI">Jalan Kaki</option>
-                        <option value="SEPEDA">Sepeda</option>
-                        <option value="SEPEDA_MOTOR">Sepeda Motor</option>
-                        <option value="MOBIL_PRIBADI">Mobil Pribadi</option>
-                        <option value="ANTAR_JEMPUT">Antar Jemput Sekolah</option>
-                        <option value="ANGKUTAN_UMUM">Angkutan Umum</option>
-                      </select>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Jenis Tempat Tinggal">
+                        <Select
+                          value={residenceType}
+                          onChange={(e) => setResidenceType(e.target.value)}
+                        >
+                          <option value="BERSAMA_ORANG_TUA">Bersama Orang Tua</option>
+                          <option value="BERSAMA_WALI">Bersama Wali</option>
+                          <option value="KOS_ASRAMA">Kost / Asrama</option>
+                          <option value="PANTI_ASUHAN">Panti Asuhan</option>
+                          <option value="LAINNYA">Lainnya</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Moda Transportasi Utama">
+                        <Select
+                          value={transportationType}
+                          onChange={(e) => setTransportationType(e.target.value)}
+                        >
+                          <option value="JALAN_KAKI">Jalan Kaki</option>
+                          <option value="SEPEDA">Sepeda</option>
+                          <option value="SEPEDA_MOTOR">Sepeda Motor</option>
+                          <option value="MOBIL_PRIBADI">Mobil Pribadi</option>
+                          <option value="ANTAR_JEMPUT">Antar Jemput Sekolah</option>
+                          <option value="ANGKUTAN_UMUM">Angkutan Umum</option>
+                        </Select>
+                      </FormField>
                     </div>
-                  </div>
-                  <div className="form-grid">
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Jarak ke Sekolah (km)
-                      </label>
-                      <input
-                        type="number"
-                        className="st-input"
-                        step="0.1"
-                        min="0"
-                        value={distanceToSchool}
-                        onChange={(e) => setDistanceToSchool(e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="Contoh: 2.5"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Jarak ke Sekolah (km)">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={distanceToSchool}
+                          onChange={(e) => setDistanceToSchool(e.target.value === "" ? "" : Number(e.target.value))}
+                          placeholder="Contoh: 2.5"
+                        />
+                      </FormField>
+                      <FormField label="Waktu Tempuh (Menit)">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={travelTimeMinutes}
+                          onChange={(e) => setTravelTimeMinutes(e.target.value === "" ? "" : Number(e.target.value))}
+                          placeholder="Contoh: 15"
+                        />
+                      </FormField>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Waktu Tempuh (Menit)
-                      </label>
-                      <input
-                        type="number"
-                        className="st-input"
-                        min="0"
-                        value={travelTimeMinutes}
-                        onChange={(e) => setTravelTimeMinutes(e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="Contoh: 15"
-                      />
-                    </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
             {/* SECTION 03: Registrasi & Akademik */}
             {activeSection === 3 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35", marginBottom: 4 }}>
-                  03. Registrasi & Akademik
-                </h3>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Tentukan nomor registrasi penerimaan, kelas penempatan aktif, dan riwayat sekolah sebelumnya.
-                </p>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nomor Pendaftaran
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={registrationNumber}
-                      onChange={(e) => setRegistrationNumber(e.target.value)}
-                      placeholder="Contoh: REG-2026-001"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Jenis Pendaftaran
-                    </label>
-                    <select
-                      className="st-input"
-                      value={registrationType}
-                      onChange={(e) => setRegistrationType(e.target.value as any)}
-                    >
-                      <option value="NEW_STUDENT">Siswa Baru</option>
-                      <option value="TRANSFER_STUDENT">Siswa Pindahan</option>
-                    </select>
-                  </div>
+              <div className="space-y-6">
+                <div className="space-y-1 pb-4 border-b border-border/60">
+                  <h2 className="text-lg font-bold font-heading text-foreground">
+                    03. Registrasi & Akademik
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Tentukan nomor registrasi penerimaan, kelas penempatan aktif, dan riwayat sekolah sebelumnya.
+                  </p>
                 </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Tanggal Masuk Sekolah *
-                    </label>
-                    <input
-                      type="date"
-                      className="st-input"
-                      value={enrolledOn}
-                      onChange={(e) => setEnrolledOn(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Kelas Saat Ini *
-                    </label>
-                    <select
-                      className="st-input"
-                      value={classId}
-                      onChange={(e) => setClassId(e.target.value)}
-                      required
-                    >
-                      {classes.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <School className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Data Registrasi & Kelas
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Nomor Pendaftaran">
+                        <Input
+                          type="text"
+                          value={registrationNumber}
+                          onChange={(e) => setRegistrationNumber(e.target.value)}
+                          placeholder="Contoh: REG-2026-001"
+                        />
+                      </FormField>
+                      <FormField label="Jenis Pendaftaran">
+                        <Select
+                          value={registrationType}
+                          onChange={(e) => setRegistrationType(e.target.value as any)}
+                        >
+                          <option value="NEW_STUDENT">Siswa Baru</option>
+                          <option value="TRANSFER_STUDENT">Siswa Pindahan</option>
+                        </Select>
+                      </FormField>
+                    </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Pernah PAUD?
-                    </label>
-                    <select
-                      className="st-input"
-                      value={attendedPaud === null ? "null" : attendedPaud ? "true" : "false"}
-                      onChange={(e) =>
-                        setAttendedPaud(e.target.value === "null" ? null : e.target.value === "true")
-                      }
-                    >
-                      <option value="true">Ya, Pernah</option>
-                      <option value="false">Tidak Pernah</option>
-                      <option value="null">Belum Diketahui</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Pernah TK / RA?
-                    </label>
-                    <select
-                      className="st-input"
-                      value={attendedKindergarten === null ? "null" : attendedKindergarten ? "true" : "false"}
-                      onChange={(e) =>
-                        setAttendedKindergarten(e.target.value === "null" ? null : e.target.value === "true")
-                      }
-                    >
-                      <option value="true">Ya, Pernah</option>
-                      <option value="false">Tidak Pernah</option>
-                      <option value="null">Belum Diketahui</option>
-                    </select>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Tanggal Masuk Sekolah" required>
+                        <Input
+                          type="date"
+                          value={enrolledOn}
+                          onChange={(e) => setEnrolledOn(e.target.value)}
+                          required
+                        />
+                      </FormField>
+                      <FormField label="Kelas Saat Ini" required>
+                        <Select
+                          value={classId}
+                          onChange={(e) => setClassId(e.target.value)}
+                          required
+                        >
+                          {classes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+                    </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nama Sekolah Asal (TK/SD)
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={previousSchoolName}
-                      onChange={(e) => setPreviousSchoolName(e.target.value)}
-                      placeholder="Contoh: TK IT Al-Ikhlas"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      NPSN Sekolah Asal
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={previousSchoolNpsn}
-                      onChange={(e) => setPreviousSchoolNpsn(e.target.value)}
-                      placeholder="8 digit NPSN jika ada"
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Pernah PAUD?">
+                        <Select
+                          value={attendedPaud === null ? "null" : attendedPaud ? "true" : "false"}
+                          onChange={(e) =>
+                            setAttendedPaud(e.target.value === "null" ? null : e.target.value === "true")
+                          }
+                        >
+                          <option value="true">Ya, Pernah</option>
+                          <option value="false">Tidak Pernah</option>
+                          <option value="null">Belum Diketahui</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Pernah TK / RA?">
+                        <Select
+                          value={attendedKindergarten === null ? "null" : attendedKindergarten ? "true" : "false"}
+                          onChange={(e) =>
+                            setAttendedKindergarten(e.target.value === "null" ? null : e.target.value === "true")
+                          }
+                        >
+                          <option value="true">Ya, Pernah</option>
+                          <option value="false">Tidak Pernah</option>
+                          <option value="null">Belum Diketahui</option>
+                        </Select>
+                      </FormField>
+                    </div>
 
-                <div style={{ background: "#fef3c7", border: "1px solid #fde68a", padding: 12, borderRadius: 6, fontSize: 11, color: "#92400e" }}>
-                  <strong>Proteksi Finansial:</strong> Perubahan kelas dan tanggal masuk pada siswa yang telah memiliki riwayat tagihan SPP dilindungi server demi integritas laporan keuangan.
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Nama Sekolah Asal (TK/SD)">
+                        <Input
+                          type="text"
+                          value={previousSchoolName}
+                          onChange={(e) => setPreviousSchoolName(e.target.value)}
+                          placeholder="Contoh: TK IT Al-Ikhlas"
+                        />
+                      </FormField>
+                      <FormField label="NPSN Sekolah Asal">
+                        <Input
+                          type="text"
+                          value={previousSchoolNpsn}
+                          onChange={(e) => setPreviousSchoolNpsn(e.target.value)}
+                          placeholder="8 digit NPSN jika ada"
+                        />
+                      </FormField>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex items-start gap-3 p-3.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs leading-relaxed">
+                  <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    <strong className="font-semibold">Proteksi Finansial:</strong> Perubahan kelas dan tanggal masuk pada siswa yang telah memiliki riwayat tagihan SPP dilindungi server demi integritas laporan keuangan.
+                  </div>
                 </div>
               </div>
             )}
 
             {/* SECTION 04: Data Ayah Kandung */}
             {activeSection === 4 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35" }}>
-                    04. Data Ayah Kandung
-                  </h3>
-                  <button
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-bold font-heading text-foreground">
+                      04. Data Ayah Kandung
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Data keluarga bersifat modular dan dapat dihubungkan ke beberapa siswa yang bersaudara.
+                    </p>
+                  </div>
+                  <Button
                     type="button"
-                    className="st-btn-secondary"
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setShowSearchFamilyModal("father");
                       setFamilySearchResults([]);
                     }}
-                    style={{ fontSize: 11, padding: "5px 10px" }}
+                    className="self-start sm:self-center"
                   >
-                    <Search size={13} style={{ marginRight: 6 }} />
-                    Pilih Data Ayah Existing
-                  </button>
-                </div>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Data keluarga bersifat modular dan dapat dihubungkan ke beberapa siswa yang bersaudara.
-                </p>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nama Lengkap Ayah
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={fatherName}
-                      onChange={(e) => setFatherName(e.target.value)}
-                      placeholder="Nama lengkap sesuai KTP"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      NIK Ayah (16 Digit)
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={fatherNik}
-                      maxLength={16}
-                      onChange={(e) => setFatherNik(e.target.value.replace(/\D/g, ""))}
-                      placeholder="16 digit angka"
-                    />
-                  </div>
+                    <Search className="size-3.5 mr-1.5" />
+                    Pilih Data Ayah Terdaftar
+                  </Button>
                 </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Status Hidup
-                    </label>
-                    <select
-                      className="st-input"
-                      value={fatherLifeStatus}
-                      onChange={(e) => setFatherLifeStatus(e.target.value)}
-                    >
-                      <option value="ALIVE">Masih Hidup</option>
-                      <option value="DECEASED">Meninggal Dunia</option>
-                      <option value="UNKNOWN">Tidak Diketahui</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Pendidikan Terakhir
-                    </label>
-                    <select
-                      className="st-input"
-                      value={fatherEducation}
-                      onChange={(e) => setFatherEducation(e.target.value)}
-                    >
-                      <option value="SD">SD / Sederajat</option>
-                      <option value="SMP">SMP / Sederajat</option>
-                      <option value="SMA">SMA / SMK / Sederajat</option>
-                      <option value="D3">Diploma (D1-D3)</option>
-                      <option value="S1">Sarjana (S1/D4)</option>
-                      <option value="S2">Magister (S2)</option>
-                      <option value="S3">Doktor (S3)</option>
-                      <option value="LAINNYA">Lainnya / Tidak Sekolah</option>
-                    </select>
-                  </div>
-                </div>
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <Users className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Informasi Demografis Ayah
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Nama Lengkap Ayah">
+                        <Input
+                          type="text"
+                          value={fatherName}
+                          onChange={(e) => setFatherName(e.target.value)}
+                          placeholder="Nama lengkap sesuai KTP"
+                        />
+                      </FormField>
+                      <FormField label="NIK Ayah (16 Digit)">
+                        <Input
+                          type="text"
+                          value={fatherNik}
+                          maxLength={16}
+                          onChange={(e) => setFatherNik(e.target.value.replace(/\D/g, ""))}
+                          placeholder="16 digit angka"
+                        />
+                      </FormField>
+                    </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Pekerjaan Utama
-                    </label>
-                    <select
-                      className="st-input"
-                      value={fatherOccupation}
-                      onChange={(e) => setFatherOccupation(e.target.value)}
-                    >
-                      <option value="PNS">ASN / PNS</option>
-                      <option value="TNI_POLRI">TNI / Polri</option>
-                      <option value="KARYAWAN_SWASTA">Karyawan Swasta</option>
-                      <option value="WIRASWASTA">Wiraswasta / Pengusaha</option>
-                      <option value="PEDAGANG">Pedagang</option>
-                      <option value="GURU_DOSEN">Guru / Dosen</option>
-                      <option value="BURUH">Buruh / Karyawan Harian</option>
-                      <option value="TIDAK_BEKERJA">Tidak Bekerja</option>
-                      <option value="LAINNYA">Lainnya</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Penghasilan Bulanan
-                    </label>
-                    <select
-                      className="st-input"
-                      value={fatherIncome}
-                      onChange={(e) => setFatherIncome(e.target.value)}
-                    >
-                      <option value="TIDAK_BERPENGHASILAN">Tidak Berpenghasilan</option>
-                      <option value="KURANG_DARI_500RB">&lt; Rp500.000</option>
-                      <option value="RP_500RB_SD_1_JT">Rp500.000 - Rp1.000.000</option>
-                      <option value="RP_1_JT_SD_2_JT">Rp1.000.000 - Rp2.000.000</option>
-                      <option value="RP_2_JT_SD_5_JT">Rp2.000.000 - Rp5.000.000</option>
-                      <option value="RP_5_JT_SD_20_JT">Rp5.000.000 - Rp20.000.000</option>
-                      <option value="LEBIH_DARI_20_JT">&gt; Rp20.000.000</option>
-                      <option value="TIDAK_DIKETAHUI">Tidak Diketahui</option>
-                    </select>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Status Hidup">
+                        <Select
+                          value={fatherLifeStatus}
+                          onChange={(e) => setFatherLifeStatus(e.target.value)}
+                        >
+                          <option value="ALIVE">Masih Hidup</option>
+                          <option value="DECEASED">Meninggal Dunia</option>
+                          <option value="UNKNOWN">Tidak Diketahui</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Pendidikan Terakhir">
+                        <Select
+                          value={fatherEducation}
+                          onChange={(e) => setFatherEducation(e.target.value)}
+                        >
+                          <option value="SD">SD / Sederajat</option>
+                          <option value="SMP">SMP / Sederajat</option>
+                          <option value="SMA">SMA / SMK / Sederajat</option>
+                          <option value="D3">Diploma (D1-D3)</option>
+                          <option value="S1">Sarjana (S1/D4)</option>
+                          <option value="S2">Magister (S2)</option>
+                          <option value="S3">Doktor (S3)</option>
+                          <option value="LAINNYA">Lainnya / Tidak Sekolah</option>
+                        </Select>
+                      </FormField>
+                    </div>
 
-                <div className="form-grid">
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nomor HP / WhatsApp Ayah
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={fatherPhone}
-                      onChange={(e) => setFatherPhone(e.target.value)}
-                      placeholder="0812xxxxxxxx"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Email Ayah
-                    </label>
-                    <input
-                      type="email"
-                      className="st-input"
-                      value={fatherEmail}
-                      onChange={(e) => setFatherEmail(e.target.value)}
-                      placeholder="ayah@contoh.com"
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Pekerjaan Utama">
+                        <Select
+                          value={fatherOccupation}
+                          onChange={(e) => setFatherOccupation(e.target.value)}
+                        >
+                          <option value="PNS">ASN / PNS</option>
+                          <option value="TNI_POLRI">TNI / Polri</option>
+                          <option value="KARYAWAN_SWASTA">Karyawan Swasta</option>
+                          <option value="WIRASWASTA">Wiraswasta / Pengusaha</option>
+                          <option value="PEDAGANG">Pedagang</option>
+                          <option value="GURU_DOSEN">Guru / Dosen</option>
+                          <option value="BURUH">Buruh / Karyawan Harian</option>
+                          <option value="TIDAK_BEKERJA">Tidak Bekerja</option>
+                          <option value="LAINNYA">Lainnya</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Penghasilan Bulanan">
+                        <Select
+                          value={fatherIncome}
+                          onChange={(e) => setFatherIncome(e.target.value)}
+                        >
+                          <option value="TIDAK_BERPENGHASILAN">Tidak Berpenghasilan</option>
+                          <option value="KURANG_DARI_500RB">&lt; Rp500.000</option>
+                          <option value="RP_500RB_SD_1_JT">Rp500.000 - Rp1.000.000</option>
+                          <option value="RP_1_JT_SD_2_JT">Rp1.000.000 - Rp2.000.000</option>
+                          <option value="RP_2_JT_SD_5_JT">Rp2.000.000 - Rp5.000.000</option>
+                          <option value="RP_5_JT_SD_20_JT">Rp5.000.000 - Rp20.000.000</option>
+                          <option value="LEBIH_DARI_20_JT">&gt; Rp20.000.000</option>
+                          <option value="TIDAK_DIKETAHUI">Tidak Diketahui</option>
+                        </Select>
+                      </FormField>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Nomor HP / WhatsApp Ayah">
+                        <Input
+                          type="text"
+                          value={fatherPhone}
+                          onChange={(e) => setFatherPhone(e.target.value)}
+                          placeholder="0812xxxxxxxx"
+                        />
+                      </FormField>
+                      <FormField label="Email Ayah">
+                        <Input
+                          type="email"
+                          value={fatherEmail}
+                          onChange={(e) => setFatherEmail(e.target.value)}
+                          placeholder="ayah@contoh.com"
+                        />
+                      </FormField>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
             {/* SECTION 05: Data Ibu Kandung */}
             {activeSection === 5 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35" }}>
-                    05. Data Ibu Kandung
-                  </h3>
-                  <button
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-bold font-heading text-foreground">
+                      05. Data Ibu Kandung
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Kelola biodata ibu kandung siswa sesuai dokumen kependudukan.
+                    </p>
+                  </div>
+                  <Button
                     type="button"
-                    className="st-btn-secondary"
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setShowSearchFamilyModal("mother");
                       setFamilySearchResults([]);
                     }}
-                    style={{ fontSize: 11, padding: "5px 10px" }}
+                    className="self-start sm:self-center"
                   >
-                    <Search size={13} style={{ marginRight: 6 }} />
-                    Pilih Data Ibu Existing
-                  </button>
-                </div>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Kelola biodata ibu kandung siswa sesuai dokumen kependudukan.
-                </p>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nama Lengkap Ibu
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={motherName}
-                      onChange={(e) => setMotherName(e.target.value)}
-                      placeholder="Nama lengkap sesuai KTP"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      NIK Ibu (16 Digit)
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={motherNik}
-                      maxLength={16}
-                      onChange={(e) => setMotherNik(e.target.value.replace(/\D/g, ""))}
-                      placeholder="16 digit angka"
-                    />
-                  </div>
+                    <Search className="size-3.5 mr-1.5" />
+                    Pilih Data Ibu Terdaftar
+                  </Button>
                 </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Status Hidup
-                    </label>
-                    <select
-                      className="st-input"
-                      value={motherLifeStatus}
-                      onChange={(e) => setMotherLifeStatus(e.target.value)}
-                    >
-                      <option value="ALIVE">Masih Hidup</option>
-                      <option value="DECEASED">Meninggal Dunia</option>
-                      <option value="UNKNOWN">Tidak Diketahui</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Pendidikan Terakhir
-                    </label>
-                    <select
-                      className="st-input"
-                      value={motherEducation}
-                      onChange={(e) => setMotherEducation(e.target.value)}
-                    >
-                      <option value="SD">SD / Sederajat</option>
-                      <option value="SMP">SMP / Sederajat</option>
-                      <option value="SMA">SMA / SMK / Sederajat</option>
-                      <option value="D3">Diploma (D1-D3)</option>
-                      <option value="S1">Sarjana (S1/D4)</option>
-                      <option value="S2">Magister (S2)</option>
-                      <option value="S3">Doktor (S3)</option>
-                      <option value="LAINNYA">Lainnya / Tidak Sekolah</option>
-                    </select>
-                  </div>
-                </div>
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <Users className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Informasi Demografis Ibu
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Nama Lengkap Ibu">
+                        <Input
+                          type="text"
+                          value={motherName}
+                          onChange={(e) => setMotherName(e.target.value)}
+                          placeholder="Nama lengkap sesuai KTP"
+                        />
+                      </FormField>
+                      <FormField label="NIK Ibu (16 Digit)">
+                        <Input
+                          type="text"
+                          value={motherNik}
+                          maxLength={16}
+                          onChange={(e) => setMotherNik(e.target.value.replace(/\D/g, ""))}
+                          placeholder="16 digit angka"
+                        />
+                      </FormField>
+                    </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Pekerjaan Utama
-                    </label>
-                    <select
-                      className="st-input"
-                      value={motherOccupation}
-                      onChange={(e) => setMotherOccupation(e.target.value)}
-                    >
-                      <option value="IBU_RUMAH_TANGGA">Ibu Rumah Tangga</option>
-                      <option value="PNS">ASN / PNS</option>
-                      <option value="KARYAWAN_SWASTA">Karyawan Swasta</option>
-                      <option value="WIRASWASTA">Wiraswasta / Pedagang</option>
-                      <option value="GURU_DOSEN">Guru / Dosen</option>
-                      <option value="TIDAK_BEKERJA">Tidak Bekerja</option>
-                      <option value="LAINNYA">Lainnya</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nomor HP / WhatsApp Ibu
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={motherPhone}
-                      onChange={(e) => setMotherPhone(e.target.value)}
-                      placeholder="0812xxxxxxxx"
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Status Hidup">
+                        <Select
+                          value={motherLifeStatus}
+                          onChange={(e) => setMotherLifeStatus(e.target.value)}
+                        >
+                          <option value="ALIVE">Masih Hidup</option>
+                          <option value="DECEASED">Meninggal Dunia</option>
+                          <option value="UNKNOWN">Tidak Diketahui</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Pendidikan Terakhir">
+                        <Select
+                          value={motherEducation}
+                          onChange={(e) => setMotherEducation(e.target.value)}
+                        >
+                          <option value="SD">SD / Sederajat</option>
+                          <option value="SMP">SMP / Sederajat</option>
+                          <option value="SMA">SMA / SMK / Sederajat</option>
+                          <option value="D3">Diploma (D1-D3)</option>
+                          <option value="S1">Sarjana (S1/D4)</option>
+                          <option value="S2">Magister (S2)</option>
+                          <option value="S3">Doktor (S3)</option>
+                          <option value="LAINNYA">Lainnya / Tidak Sekolah</option>
+                        </Select>
+                      </FormField>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Pekerjaan Utama">
+                        <Select
+                          value={motherOccupation}
+                          onChange={(e) => setMotherOccupation(e.target.value)}
+                        >
+                          <option value="IBU_RUMAH_TANGGA">Ibu Rumah Tangga</option>
+                          <option value="PNS">ASN / PNS</option>
+                          <option value="KARYAWAN_SWASTA">Karyawan Swasta</option>
+                          <option value="WIRASWASTA">Wiraswasta / Pedagang</option>
+                          <option value="GURU_DOSEN">Guru / Dosen</option>
+                          <option value="TIDAK_BEKERJA">Tidak Bekerja</option>
+                          <option value="LAINNYA">Lainnya</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Nomor HP / WhatsApp Ibu">
+                        <Input
+                          type="text"
+                          value={motherPhone}
+                          onChange={(e) => setMotherPhone(e.target.value)}
+                          placeholder="0812xxxxxxxx"
+                        />
+                      </FormField>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
             {/* SECTION 06: Wali & Kontak Darurat */}
             {activeSection === 6 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35", marginBottom: 4 }}>
-                  06. Wali & Kontak Darurat
-                </h3>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Tentukan penanggung jawab administratif, penanggung jawab SPP, dan nomor kontak darurat sekolah.
-                </p>
-
-                <div style={{ background: "#f9faf9", border: "1px solid #e9eeea", padding: 16, borderRadius: 8, marginBottom: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35", marginBottom: 10 }}>
-                    PENANGGUNG JAWAB & KONTAK UTAMA SEKOLAH
-                  </div>
-                  <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                      <input
-                        type="radio"
-                        name="primaryContact"
-                        checked={primaryContact === "FATHER"}
-                        onChange={() => setPrimaryContact("FATHER")}
-                      />
-                      Ayah Kandung
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                      <input
-                        type="radio"
-                        name="primaryContact"
-                        checked={primaryContact === "MOTHER"}
-                        onChange={() => setPrimaryContact("MOTHER")}
-                      />
-                      Ibu Kandung
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                      <input
-                        type="radio"
-                        name="primaryContact"
-                        checked={primaryContact === "GUARDIAN"}
-                        onChange={() => setPrimaryContact("GUARDIAN")}
-                      />
-                      Wali Lainnya
-                    </label>
-                  </div>
-
-                  <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35", marginBottom: 10 }}>
-                    PENANGGUNG JAWAB SPP / PEMBAYARAN
-                  </div>
-                  <div style={{ display: "flex", gap: 16 }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                      <input
-                        type="radio"
-                        name="paymentResponsible"
-                        checked={paymentResponsible === "FATHER"}
-                        onChange={() => setPaymentResponsible("FATHER")}
-                      />
-                      Ayah Kandung
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                      <input
-                        type="radio"
-                        name="paymentResponsible"
-                        checked={paymentResponsible === "MOTHER"}
-                        onChange={() => setPaymentResponsible("MOTHER")}
-                      />
-                      Ibu Kandung
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                      <input
-                        type="radio"
-                        name="paymentResponsible"
-                        checked={paymentResponsible === "GUARDIAN"}
-                        onChange={() => setPaymentResponsible("GUARDIAN")}
-                      />
-                      Wali Lainnya
-                    </label>
-                  </div>
+              <div className="space-y-6">
+                <div className="space-y-1 pb-4 border-b border-border/60">
+                  <h2 className="text-lg font-bold font-heading text-foreground">
+                    06. Wali & Kontak Darurat
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Tentukan penanggung jawab administratif, penanggung jawab SPP, dan nomor kontak darurat sekolah.
+                  </p>
                 </div>
 
-                <div style={{ background: "#f7f9f7", border: "1px solid #e7ece8", padding: 16, borderRadius: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35", marginBottom: 12 }}>
-                    KONTAK DARURAT (EMERGENCY CONTACT)
-                  </div>
-                  <div className="form-grid" style={{ marginBottom: 12 }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Nama Kontak Darurat *
-                      </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={emergencyName}
-                        onChange={(e) => setEmergencyName(e.target.value)}
-                        placeholder="Nama orang yang dapat dihubungi segera"
-                      />
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <Shield className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Penanggung Jawab Administratif & Keuangan
+                      </CardTitle>
                     </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-5">
                     <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                        Hubungan dengan Siswa
+                      <label className="block text-xs font-semibold text-foreground mb-2">
+                        Kontak Utama / Penanggung Jawab Administratif Siswa
                       </label>
-                      <input
-                        type="text"
-                        className="st-input"
-                        value={emergencyRelationship}
-                        onChange={(e) => setEmergencyRelationship(e.target.value)}
-                        placeholder="Contoh: Ayah Kandung / Paman"
-                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { id: "FATHER", label: "Ayah Kandung" },
+                          { id: "MOTHER", label: "Ibu Kandung" },
+                          { id: "GUARDIAN", label: "Wali Lainnya" },
+                        ].map((item) => (
+                          <label
+                            key={item.id}
+                            className={cn(
+                              "flex items-center justify-center gap-2 h-10 px-3 rounded-lg border text-xs font-semibold cursor-pointer transition-all",
+                              primaryContact === item.id
+                                ? "bg-primary/10 border-primary text-primary"
+                                : "bg-card border-input text-foreground hover:bg-muted"
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="primaryContact"
+                              className="hidden"
+                              checked={primaryContact === item.id}
+                              onChange={() => setPrimaryContact(item.id as any)}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Nomor Telepon / WhatsApp Darurat *
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={emergencyPhone}
-                      onChange={(e) => setEmergencyPhone(e.target.value)}
-                      placeholder="0812xxxxxxxx"
-                    />
-                  </div>
-                </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-foreground mb-2">
+                        Penanggung Jawab Tagihan SPP & Finansial
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { id: "FATHER", label: "Ayah Kandung" },
+                          { id: "MOTHER", label: "Ibu Kandung" },
+                          { id: "GUARDIAN", label: "Wali Lainnya" },
+                        ].map((item) => (
+                          <label
+                            key={item.id}
+                            className={cn(
+                              "flex items-center justify-center gap-2 h-10 px-3 rounded-lg border text-xs font-semibold cursor-pointer transition-all",
+                              paymentResponsible === item.id
+                                ? "bg-primary/10 border-primary text-primary"
+                                : "bg-card border-input text-foreground hover:bg-muted"
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="paymentResponsible"
+                              className="hidden"
+                              checked={paymentResponsible === item.id}
+                              onChange={() => setPaymentResponsible(item.id as any)}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <Phone className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Kontak Darurat (Emergency Contact)
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Nama Kontak Darurat" required>
+                        <Input
+                          type="text"
+                          value={emergencyName}
+                          onChange={(e) => setEmergencyName(e.target.value)}
+                          placeholder="Nama orang yang dapat dihubungi segera"
+                          required
+                        />
+                      </FormField>
+                      <FormField label="Hubungan dengan Siswa">
+                        <Input
+                          type="text"
+                          value={emergencyRelationship}
+                          onChange={(e) => setEmergencyRelationship(e.target.value)}
+                          placeholder="Contoh: Ayah Kandung / Paman"
+                        />
+                      </FormField>
+                    </div>
+
+                    <FormField label="Nomor Telepon / WhatsApp Darurat" required>
+                      <Input
+                        type="text"
+                        value={emergencyPhone}
+                        onChange={(e) => setEmergencyPhone(e.target.value)}
+                        placeholder="0812xxxxxxxx"
+                        required
+                      />
+                    </FormField>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
             {/* SECTION 07: Kesehatan & Kebutuhan Khusus */}
             {activeSection === 7 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35", marginBottom: 4 }}>
-                  07. Kesehatan & Kebutuhan Khusus
-                </h3>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Catatan medis bersifat rahasia dan hanya digunakan untuk keselamatan serta pendampingan belajar anak.
-                </p>
-
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Golongan Darah
-                    </label>
-                    <select
-                      className="st-input"
-                      value={bloodType}
-                      onChange={(e) => setBloodType(e.target.value)}
-                    >
-                      <option value="UNKNOWN">Belum Diketahui</option>
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="AB">AB</option>
-                      <option value="O">O</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Memiliki Kebutuhan Khusus?
-                    </label>
-                    <select
-                      className="st-input"
-                      value={hasSpecialNeeds ? "true" : "false"}
-                      onChange={(e) => setHasSpecialNeeds(e.target.value === "true")}
-                    >
-                      <option value="false">Tidak Ada</option>
-                      <option value="true">Ada Kebutuhan Khusus</option>
-                    </select>
-                  </div>
+              <div className="space-y-6">
+                <div className="space-y-1 pb-4 border-b border-border/60">
+                  <h2 className="text-lg font-bold font-heading text-foreground">
+                    07. Kesehatan & Kebutuhan Khusus
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Catatan medis bersifat rahasia dan hanya digunakan untuk keselamatan serta pendampingan belajar anak.
+                  </p>
                 </div>
 
-                <div className="form-grid" style={{ marginBottom: 16 }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Alergi Makanan
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={foodAllergies}
-                      onChange={(e) => setFoodAllergies(e.target.value)}
-                      placeholder="Contoh: Udang, kacang tanah"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                      Alergi Obat
-                    </label>
-                    <input
-                      type="text"
-                      className="st-input"
-                      value={drugAllergies}
-                      onChange={(e) => setDrugAllergies(e.target.value)}
-                      placeholder="Contoh: Penisilin, amoksisilin"
-                    />
-                  </div>
-                </div>
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60">
+                    <div className="flex items-center gap-2">
+                      <HeartPulse className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Informasi Medis & Alergi
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Golongan Darah">
+                        <Select
+                          value={bloodType}
+                          onChange={(e) => setBloodType(e.target.value)}
+                        >
+                          <option value="UNKNOWN">Belum Diketahui</option>
+                          <option value="A">A</option>
+                          <option value="B">B</option>
+                          <option value="AB">AB</option>
+                          <option value="O">O</option>
+                        </Select>
+                      </FormField>
+                      <FormField label="Memiliki Kebutuhan Khusus?">
+                        <Select
+                          value={hasSpecialNeeds ? "true" : "false"}
+                          onChange={(e) => setHasSpecialNeeds(e.target.value === "true")}
+                        >
+                          <option value="false">Tidak Ada</option>
+                          <option value="true">Ada Kebutuhan Khusus</option>
+                        </Select>
+                      </FormField>
+                    </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                    Riwayat Penyakit yang Pernah Diderita
-                  </label>
-                  <textarea
-                    rows={2}
-                    className="st-input"
-                    value={medicalHistory}
-                    onChange={(e) => setMedicalHistory(e.target.value)}
-                    placeholder="Contoh: Asma, kejang demam (step)"
-                  />
-                </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField label="Alergi Makanan">
+                        <Input
+                          type="text"
+                          value={foodAllergies}
+                          onChange={(e) => setFoodAllergies(e.target.value)}
+                          placeholder="Contoh: Udang, kacang tanah"
+                        />
+                      </FormField>
+                      <FormField label="Alergi Obat">
+                        <Input
+                          type="text"
+                          value={drugAllergies}
+                          onChange={(e) => setDrugAllergies(e.target.value)}
+                          placeholder="Contoh: Penisilin, amoksisilin"
+                        />
+                      </FormField>
+                    </div>
 
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                    Catatan Penanganan Darurat / Pengobatan Rutin
-                  </label>
-                  <textarea
-                    rows={2}
-                    className="st-input"
-                    value={emergencyHandlingNotes}
-                    onChange={(e) => setEmergencyHandlingNotes(e.target.value)}
-                    placeholder="Tindakan yang harus diambil jika alergi kambuh"
-                  />
-                </div>
+                    <FormField label="Riwayat Penyakit yang Pernah Diderita">
+                      <Textarea
+                        rows={2}
+                        value={medicalHistory}
+                        onChange={(e) => setMedicalHistory(e.target.value)}
+                        placeholder="Contoh: Asma, kejang demam (step)"
+                      />
+                    </FormField>
+
+                    <FormField label="Catatan Penanganan Darurat / Pengobatan Rutin">
+                      <Textarea
+                        rows={2}
+                        value={emergencyHandlingNotes}
+                        onChange={(e) => setEmergencyHandlingNotes(e.target.value)}
+                        placeholder="Tindakan yang harus diambil jika alergi kambuh"
+                      />
+                    </FormField>
+                  </CardContent>
+                </Card>
 
                 {/* Tabel Pengukuran Fisik */}
-                <div style={{ background: "#f9faf9", border: "1px solid #e9eeea", padding: 16, borderRadius: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35" }}>
-                      PENGUKURAN FISIK BERKALA (TINGGI & BERAT BADAN)
+                <Card className="border border-border/80 shadow-xs">
+                  <CardHeader className="py-3.5 px-5 bg-muted/30 border-b border-border/60 flex flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Award className="size-4 text-primary" />
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Pengukuran Fisik Berkala (Tinggi & Berat Badan)
+                      </CardTitle>
                     </div>
-                    <button
+                    <Button
                       type="button"
-                      className="st-btn-secondary"
+                      variant="outline"
+                      size="sm"
                       onClick={() => setShowMeasurementModal(true)}
-                      style={{ fontSize: 11, padding: "5px 10px" }}
                     >
-                      <Plus size={13} style={{ marginRight: 6 }} />
+                      <Plus className="size-3.5 mr-1.5" />
                       Tambah Pengukuran
-                    </button>
-                  </div>
-
-                  {measurements.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "16px 0", color: "#87918c", fontSize: 12 }}>
-                      Belum ada catatan pengukuran fisik berkala.
-                    </div>
-                  ) : (
-                    <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr style={{ borderBottom: "1px solid #e1e7e3", textAlign: "left", color: "#6c7971" }}>
-                          <th style={{ padding: "6px 8px" }}>Tanggal</th>
-                          <th style={{ padding: "6px 8px" }}>Tinggi (cm)</th>
-                          <th style={{ padding: "6px 8px" }}>Berat (kg)</th>
-                          <th style={{ padding: "6px 8px" }}>Catatan</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {measurements.map((m, i) => (
-                          <tr key={i} style={{ borderBottom: "1px solid #f0f3f1" }}>
-                            <td style={{ padding: "8px" }}>{m.measurementDate}</td>
-                            <td style={{ padding: "8px", fontWeight: 700 }}>{m.heightCm} cm</td>
-                            <td style={{ padding: "8px", fontWeight: 700 }}>{m.weightKg} kg</td>
-                            <td style={{ padding: "8px", color: "#7a8c6d" }}>{m.notes || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {measurements.length === 0 ? (
+                      <div className="text-center py-8 px-4 text-xs text-muted-foreground">
+                        Belum ada catatan pengukuran fisik berkala.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-border/60 bg-muted/20 text-muted-foreground">
+                              <th className="py-2.5 px-4 font-semibold">Tanggal</th>
+                              <th className="py-2.5 px-4 font-semibold">Tinggi (cm)</th>
+                              <th className="py-2.5 px-4 font-semibold">Berat (kg)</th>
+                              <th className="py-2.5 px-4 font-semibold">Catatan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {measurements.map((m, i) => (
+                              <tr key={i} className="hover:bg-muted/30 transition-colors">
+                                <td className="py-3 px-4 text-foreground font-medium">{m.measurementDate}</td>
+                                <td className="py-3 px-4 font-semibold text-primary">{m.heightCm} cm</td>
+                                <td className="py-3 px-4 font-semibold text-primary">{m.weightKg} kg</td>
+                                <td className="py-3 px-4 text-muted-foreground">{m.notes || "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
 
             {/* SECTION 08: Bantuan Pendidikan */}
             {activeSection === 8 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35" }}>
-                    08. Bantuan Pendidikan
-                  </h3>
-                  <button
-                    type="button"
-                    className="st-btn-secondary"
-                    onClick={() => setShowAidModal(true)}
-                    style={{ fontSize: 11, padding: "5px 10px" }}
-                  >
-                    <Plus size={13} style={{ marginRight: 6 }} />
-                    Tambah Bantuan
-                  </button>
-                </div>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Pencatatan KIP, PIP, PKH, atau beasiswa merupakan data administrasi dan tidak mengubah tagihan SPP secara otomatis.
-                </p>
-
-                {aidRecords.length === 0 ? (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: 30,
-                      background: "#f9faf9",
-                      borderRadius: 8,
-                      border: "1px dashed #d1dbd4",
-                      color: "#6c7971",
-                    }}
-                  >
-                    <Award size={32} style={{ margin: "0 auto 8px", color: "#87918c" }} />
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#34443c" }}>
-                      Tidak Ada Bantuan Terdaftar
-                    </div>
-                    <p style={{ fontSize: 11, margin: "4px 0 0" }}>
-                      Siswa saat ini tercatat tidak menerima program bantuan atau beasiswa.
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-bold font-heading text-foreground">
+                      08. Bantuan Pendidikan
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Pencatatan KIP, PIP, PKH, atau beasiswa merupakan data administrasi dan tidak mengubah tagihan SPP secara otomatis.
                     </p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAidModal(true)}
+                    className="self-start sm:self-center"
+                  >
+                    <Plus className="size-3.5 mr-1.5" />
+                    Tambah Bantuan
+                  </Button>
+                </div>
+
+                {aidRecords.length === 0 ? (
+                  <Card className="border border-dashed border-border/80 bg-muted/20">
+                    <CardContent className="text-center py-10 px-4 space-y-2">
+                      <Award className="size-8 mx-auto text-muted-foreground/60" />
+                      <h4 className="text-xs font-bold text-foreground">Tidak Ada Bantuan Terdaftar</h4>
+                      <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                        Siswa saat ini tercatat tidak menerima program bantuan atau beasiswa eksternal.
+                      </p>
+                    </CardContent>
+                  </Card>
                 ) : (
-                  <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #e1e7e3", textAlign: "left", color: "#6c7971" }}>
-                        <th style={{ padding: "8px" }}>Program Bantuan</th>
-                        <th style={{ padding: "8px" }}>Nomor Kartu / SK</th>
-                        <th style={{ padding: "8px" }}>Sumber</th>
-                        <th style={{ padding: "8px" }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {aidRecords.map((a, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid #f0f3f1" }}>
-                          <td style={{ padding: "10px 8px", fontWeight: 700, color: "#154d35" }}>
-                            {a.aidType}
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>{a.aidNumber || "-"}</td>
-                          <td style={{ padding: "10px 8px" }}>{a.aidSource || "-"}</td>
-                          <td style={{ padding: "10px 8px" }}>
-                            <Badge status={a.status || "ACTIVE"} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <Card className="border border-border/80 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border/60 bg-muted/20 text-muted-foreground">
+                            <th className="py-2.5 px-4 font-semibold">Program Bantuan</th>
+                            <th className="py-2.5 px-4 font-semibold">Nomor Kartu / SK</th>
+                            <th className="py-2.5 px-4 font-semibold">Sumber</th>
+                            <th className="py-2.5 px-4 font-semibold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {aidRecords.map((a, i) => (
+                            <tr key={i} className="hover:bg-muted/30 transition-colors">
+                              <td className="py-3 px-4 font-semibold text-primary">{a.aidType}</td>
+                              <td className="py-3 px-4 text-foreground">{a.aidNumber || "-"}</td>
+                              <td className="py-3 px-4 text-muted-foreground">{a.aidSource || "-"}</td>
+                              <td className="py-3 px-4">
+                                <Badge status={a.status || "ACTIVE"} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
                 )}
               </div>
             )}
 
             {/* SECTION 09: Karakteristik Anak */}
             {activeSection === 9 && (
-              <div>
-                <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35", marginBottom: 4 }}>
-                  09. Karakteristik & Perkembangan Anak
-                </h3>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Terintegrasi dengan modul evaluasi karakteristik santri dan kebiasaan ibadah harian.
-                </p>
-
-                <div style={{ background: "#f7f9f7", border: "1px solid #e7ece8", padding: 18, borderRadius: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                    <BookOpen size={24} color="#16613e" />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 750, color: "#154d35" }}>
-                        Formulir Karakteristik Siswa
-                      </div>
-                      <div style={{ fontSize: 11, color: "#6c7971" }}>
-                        Pengisian kuesioner perkembangan anak dapat dilengkapi melalui portal wali murid.
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#536448", lineHeight: 1.6 }}>
-                    Mencakup: Minat, bakat, kebiasaan belajar, kemandirian anak, kemampuan membaca Al-Qur'an, metode pembelajaran sebelumnya, serta hafalan surat/doa harian.
-                  </div>
+              <div className="space-y-6">
+                <div className="space-y-1 pb-4 border-b border-border/60">
+                  <h2 className="text-lg font-bold font-heading text-foreground">
+                    09. Karakteristik & Perkembangan Anak
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Terintegrasi dengan modul evaluasi karakteristik santri dan kebiasaan ibadah harian.
+                  </p>
                 </div>
+
+                <Card className="border border-border/80 bg-muted/20 shadow-xs">
+                  <CardContent className="p-6 flex items-start gap-4">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+                      <BookOpen className="size-5" />
+                    </div>
+                    <div className="space-y-1.5 flex-1">
+                      <h4 className="text-sm font-bold text-foreground">
+                        Formulir Karakteristik Siswa Terpadu
+                      </h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Pengisian kuesioner perkembangan anak, minat, bakat, kebiasaan belajar, kemandirian anak, kemampuan membaca Al-Qur'an, metode pembelajaran sebelumnya, serta hafalan surat/doa harian dapat dilengkapi dan diperbarui secara berkala melalui modul Karakteristik maupun portal wali murid.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
             {/* SECTION 10: Dokumen Persyaratan */}
             {activeSection === 10 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 750, color: "#154d35" }}>
-                    10. Dokumen Persyaratan
-                  </h3>
-                  <button
-                    type="button"
-                    className="st-btn-secondary"
-                    onClick={() => setShowUploadDocModal(true)}
-                    style={{ fontSize: 11, padding: "5px 10px" }}
-                  >
-                    <Upload size={13} style={{ marginRight: 6 }} />
-                    Unggah Dokumen
-                  </button>
-                </div>
-                <p style={{ fontSize: 12, color: "#7a8c6d", marginBottom: 20 }}>
-                  Dokumen disimpan secara aman pada private storage Vercel Blob dan diverifikasi oleh staf Tata Usaha.
-                </p>
-
-                {documents.length === 0 ? (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: 30,
-                      background: "#f9faf9",
-                      borderRadius: 8,
-                      border: "1px dashed #d1dbd4",
-                      color: "#6c7971",
-                    }}
-                  >
-                    <FolderOpen size={32} style={{ margin: "0 auto 8px", color: "#87918c" }} />
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#34443c" }}>
-                      Belum Ada Berkas Diunggah
-                    </div>
-                    <p style={{ fontSize: 11, margin: "4px 0 0" }}>
-                      Unggah berkas KK, Akta Kelahiran, KTP Orang Tua, atau Ijazah TK.
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-bold font-heading text-foreground">
+                      10. Dokumen Persyaratan
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Dokumen disimpan secara aman pada private storage Vercel Blob dan diverifikasi oleh staf Tata Usaha.
                     </p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowUploadDocModal(true)}
+                    className="self-start sm:self-center"
+                  >
+                    <Upload className="size-3.5 mr-1.5" />
+                    Unggah Dokumen
+                  </Button>
+                </div>
+
+                {documents.length === 0 ? (
+                  <Card className="border border-dashed border-border/80 bg-muted/20">
+                    <CardContent className="text-center py-10 px-4 space-y-2">
+                      <FolderOpen className="size-8 mx-auto text-muted-foreground/60" />
+                      <h4 className="text-xs font-bold text-foreground">Belum Ada Berkas Diunggah</h4>
+                      <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                        Unggah berkas KK, Akta Kelahiran, KTP Orang Tua, atau Ijazah TK sebagai kelengkapan administrasi.
+                      </p>
+                    </CardContent>
+                  </Card>
                 ) : (
-                  <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #e1e7e3", textAlign: "left", color: "#6c7971" }}>
-                        <th style={{ padding: "8px" }}>Jenis Dokumen</th>
-                        <th style={{ padding: "8px" }}>Nama Berkas</th>
-                        <th style={{ padding: "8px" }}>Status Verifikasi</th>
-                        <th style={{ padding: "8px", textAlign: "right" }}>Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {documents.map((doc, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid #f0f3f1" }}>
-                          <td style={{ padding: "10px 8px", fontWeight: 700, color: "#154d35" }}>
-                            {doc.documentType}
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>{doc.documentName || doc.originalFilename}</td>
-                          <td style={{ padding: "10px 8px" }}>
-                            <Badge status={doc.verificationStatus} />
-                          </td>
-                          <td style={{ padding: "10px 8px", textAlign: "right" }}>
-                            <button
-                              type="button"
-                              className="st-btn-secondary"
-                              onClick={() => window.open(doc.storagePath, "_blank")}
-                              style={{ fontSize: 10, padding: "3px 8px" }}
-                            >
-                              Lihat
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <Card className="border border-border/80 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border/60 bg-muted/20 text-muted-foreground">
+                            <th className="py-2.5 px-4 font-semibold">Jenis Dokumen</th>
+                            <th className="py-2.5 px-4 font-semibold">Nama Berkas</th>
+                            <th className="py-2.5 px-4 font-semibold">Status Verifikasi</th>
+                            <th className="py-2.5 px-4 font-semibold text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {documents.map((doc, i) => (
+                            <tr key={i} className="hover:bg-muted/30 transition-colors">
+                              <td className="py-3 px-4 font-semibold text-primary">{doc.documentType}</td>
+                              <td className="py-3 px-4 text-foreground">{doc.documentName || doc.originalFilename}</td>
+                              <td className="py-3 px-4">
+                                <Badge status={doc.verificationStatus} />
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => window.open(doc.storagePath, "_blank")}
+                                >
+                                  <Eye className="size-3 mr-1" />
+                                  Lihat
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
                 )}
               </div>
             )}
 
             {/* Bottom Form Actions Bar */}
-            <div
-              style={{
-                marginTop: 24,
-                paddingTop: 16,
-                borderTop: "1px solid #edf0ed",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-border/70">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-start">
+                <Button
                   type="button"
-                  className="st-btn-secondary"
+                  variant="outline"
                   onClick={onCancel}
                   disabled={busy}
                 >
                   Batal
-                </button>
+                </Button>
                 {mode === "tambah" && onSaveDraft && (
-                  <button
+                  <Button
                     type="button"
-                    className="st-btn-secondary"
+                    variant="secondary"
                     onClick={handleDraftSaveClick}
                     disabled={busy}
-                    style={{ color: "#16613e" }}
+                    className="text-primary hover:text-primary hover:bg-primary/10 border border-primary/20"
                   >
-                    <Save size={14} style={{ marginRight: 6 }} />
+                    <Save className="size-4 mr-1.5" />
                     Simpan Draf
-                  </button>
+                  </Button>
                 )}
               </div>
 
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
                 {activeSection > 1 && (
-                  <button
+                  <Button
                     type="button"
-                    className="st-btn-secondary"
+                    variant="outline"
                     onClick={() => setActiveSection((s) => Math.max(1, s - 1))}
                     disabled={busy}
                   >
+                    <ChevronLeft className="size-4 mr-1.5" />
                     Kembali
-                  </button>
+                  </Button>
                 )}
                 {activeSection < 10 ? (
-                  <button
+                  <Button
                     type="button"
-                    className="st-btn-primary"
+                    variant="default"
                     onClick={() => setActiveSection((s) => Math.min(10, s + 1))}
                     disabled={busy}
                   >
                     Selanjutnya
-                    <ChevronRight size={14} style={{ marginLeft: 6 }} />
-                  </button>
+                    <ChevronRight className="size-4 ml-1.5" />
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     type="submit"
-                    className="st-btn-primary"
+                    variant="default"
                     disabled={busy}
-                    style={{ padding: "8px 20px" }}
+                    className="px-6"
                   >
-                    <Check size={16} style={{ marginRight: 6 }} />
+                    <Check className="size-4 mr-1.5" />
                     {mode === "tambah" ? "Simpan Siswa Baru" : "Simpan Perubahan"}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
           </form>
         </div>
-      </div>
+      </Card>
+    </div>
 
       {/* Modal Search Family Existing */}
       {showSearchFamilyModal && (
@@ -2232,59 +2131,50 @@ export function StudentFormView({
           title={`Pilih Data ${showSearchFamilyModal === "father" ? "Ayah" : "Ibu"} Terdaftar`}
           close={() => setShowSearchFamilyModal(null)}
         >
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 12, color: "#6c7971", marginBottom: 12 }}>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               Cari data orang tua yang telah terdaftar pada database sekolah untuk menghubungkan siswa bersaudara.
             </p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
+            <div className="flex gap-2">
+              <Input
                 type="text"
-                className="st-input"
                 placeholder="Cari nama, NIK, atau nomor HP..."
                 value={familySearchQuery}
                 onChange={(e) => setFamilySearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearchFamily()}
+                className="flex-1"
               />
-              <button
+              <Button
                 type="button"
-                className="st-btn-primary"
+                variant="default"
                 onClick={handleSearchFamily}
                 disabled={searchingFamily}
               >
                 {searchingFamily ? "Mencari..." : "Cari"}
-              </button>
+              </Button>
             </div>
-          </div>
 
-          <div style={{ maxHeight: 250, overflowY: "auto" }}>
-            {familySearchResults.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 20, color: "#87918c", fontSize: 12 }}>
-                {familySearchQuery ? "Tidak ditemukan anggota keluarga yang cocok" : "Ketik kata kunci pencarian"}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {familySearchResults.map((m) => (
+            <div className="max-h-64 overflow-y-auto space-y-2 pt-2">
+              {familySearchResults.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground">
+                  {familySearchQuery ? "Tidak ditemukan anggota keluarga yang cocok" : "Ketik kata kunci pencarian nama atau NIK"}
+                </div>
+              ) : (
+                familySearchResults.map((m) => (
                   <div
                     key={m.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: 10,
-                      border: "1px solid #e1e7e3",
-                      borderRadius: 6,
-                    }}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-card hover:bg-muted/40 transition-colors"
                   >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "#154d35" }}>{m.fullName}</div>
-                      <div style={{ fontSize: 11, color: "#6c7971" }}>
+                    <div className="space-y-0.5">
+                      <div className="font-semibold text-xs text-primary">{m.fullName}</div>
+                      <div className="text-[11px] text-muted-foreground">
                         NIK: {m.maskedNik} • HP: {m.maskedPhone} • {m.occupation || "Pekerjaan -"}
                       </div>
                     </div>
-                    <button
+                    <Button
                       type="button"
-                      className="st-btn-primary"
-                      style={{ fontSize: 11, padding: "4px 10px" }}
+                      size="sm"
+                      variant="default"
                       onClick={() => {
                         if (showSearchFamilyModal === "father") {
                           setFatherMode("existing");
@@ -2299,11 +2189,11 @@ export function StudentFormView({
                       }}
                     >
                       Pilih
-                    </button>
+                    </Button>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
         </Modal>
       )}
@@ -2314,27 +2204,19 @@ export function StudentFormView({
           title="Tambah Pengukuran Fisik Berkala"
           close={() => setShowMeasurementModal(false)}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Tanggal Pengukuran
-              </label>
-              <input
+          <div className="space-y-4">
+            <FormField label="Tanggal Pengukuran">
+              <Input
                 type="date"
-                className="st-input"
                 value={newMeasureDate}
                 onChange={(e) => setNewMeasureDate(e.target.value)}
                 max={todayStr}
               />
-            </div>
-            <div className="form-grid">
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                  Tinggi Badan (cm) *
-                </label>
-                <input
+            </FormField>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Tinggi Badan (cm)" required>
+                <Input
                   type="number"
-                  className="st-input"
                   min="30"
                   max="250"
                   value={newHeight}
@@ -2342,14 +2224,10 @@ export function StudentFormView({
                   placeholder="Contoh: 125"
                   required
                 />
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                  Berat Badan (kg) *
-                </label>
-                <input
+              </FormField>
+              <FormField label="Berat Badan (kg)" required>
+                <Input
                   type="number"
-                  className="st-input"
                   min="5"
                   max="200"
                   value={newWeight}
@@ -2357,36 +2235,32 @@ export function StudentFormView({
                   placeholder="Contoh: 26.5"
                   required
                 />
-              </div>
+              </FormField>
             </div>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Catatan Petugas (Opsional)
-              </label>
-              <input
+            <FormField label="Catatan Petugas (Opsional)">
+              <Input
                 type="text"
-                className="st-input"
                 value={newMeasureNotes}
                 onChange={(e) => setNewMeasureNotes(e.target.value)}
                 placeholder="Pemeriksaan berkala UKS semester 1"
               />
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-              <button
+            </FormField>
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
                 type="button"
-                className="st-btn-secondary"
+                variant="outline"
                 onClick={() => setShowMeasurementModal(false)}
               >
                 Batal
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="st-btn-primary"
+                variant="default"
                 onClick={handleAddMeasurement}
                 disabled={!newHeight || !newWeight}
               >
                 Simpan Pengukuran
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
@@ -2398,13 +2272,9 @@ export function StudentFormView({
           title="Tambah Catatan Bantuan Pendidikan"
           close={() => setShowAidModal(false)}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Jenis Program Bantuan *
-              </label>
-              <select
-                className="st-input"
+          <div className="space-y-4">
+            <FormField label="Jenis Program Bantuan" required>
+              <Select
                 value={newAidType}
                 onChange={(e) => setNewAidType(e.target.value)}
               >
@@ -2415,59 +2285,47 @@ export function StudentFormView({
                 <option value="BEASISWA_INTERNAL">Beasiswa Internal Yayasan</option>
                 <option value="BEASISWA_EKSTERNAL">Beasiswa Eksternal</option>
                 <option value="OTHER">Lainnya</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Nomor Kartu / Nomor KIP / Nomor SK
-              </label>
-              <input
+              </Select>
+            </FormField>
+            <FormField label="Nomor Kartu / Nomor KIP / Nomor SK">
+              <Input
                 type="text"
-                className="st-input"
                 value={newAidNumber}
                 onChange={(e) => setNewAidNumber(e.target.value)}
                 placeholder="Nomor kartu bantuan"
               />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Instansi / Sumber Pemberi
-              </label>
-              <input
+            </FormField>
+            <FormField label="Instansi / Sumber Pemberi">
+              <Input
                 type="text"
-                className="st-input"
                 value={newAidSource}
                 onChange={(e) => setNewAidSource(e.target.value)}
                 placeholder="Kementerian Pendidikan / Yayasan"
               />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Catatan Keterangan
-              </label>
-              <textarea
+            </FormField>
+            <FormField label="Catatan Keterangan">
+              <Textarea
                 rows={2}
-                className="st-input"
                 value={newAidNotes}
                 onChange={(e) => setNewAidNotes(e.target.value)}
                 placeholder="Keterangan alokasi bantuan"
               />
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-              <button
+            </FormField>
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
                 type="button"
-                className="st-btn-secondary"
+                variant="outline"
                 onClick={() => setShowAidModal(false)}
               >
                 Batal
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="st-btn-primary"
+                variant="default"
                 onClick={handleAddAid}
               >
                 Tambahkan Bantuan
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
@@ -2479,13 +2337,9 @@ export function StudentFormView({
           title="Unggah Dokumen Persyaratan"
           close={() => setShowUploadDocModal(false)}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Jenis Dokumen *
-              </label>
-              <select
-                className="st-input"
+          <div className="space-y-4">
+            <FormField label="Jenis Dokumen" required>
+              <Select
                 value={uploadDocType}
                 onChange={(e) => {
                   setUploadDocType(e.target.value);
@@ -2516,47 +2370,40 @@ export function StudentFormView({
                 <option value="SURAT_PINDAH">Surat Pindah</option>
                 <option value="BUKTI_BANTUAN">Bukti KIP / PKH</option>
                 <option value="LAINNYA">Lainnya</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Nama Dokumen / Keterangan
-              </label>
-              <input
+            <FormField label="Nama Dokumen / Keterangan">
+              <Input
                 type="text"
-                className="st-input"
                 value={uploadDocName}
                 onChange={(e) => setUploadDocName(e.target.value)}
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#34443c", marginBottom: 6 }}>
-                Pilih Berkas (PDF, JPG, PNG maks 5 MB) *
-              </label>
-              <input
+            <FormField label="Pilih Berkas (PDF, JPG, PNG maks 5 MB)" required>
+              <Input
                 type="file"
-                className="st-input"
                 accept="application/pdf,image/jpeg,image/png,image/webp"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) setUploadDocFile(f);
                 }}
+                className="cursor-pointer file:cursor-pointer file:rounded-md file:border-0 file:bg-primary/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
               />
-            </div>
+            </FormField>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-              <button
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
                 type="button"
-                className="st-btn-secondary"
+                variant="outline"
                 onClick={() => setShowUploadDocModal(false)}
               >
                 Batal
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="st-btn-primary"
+                variant="default"
                 disabled={!uploadDocFile}
                 onClick={() => {
                   if (uploadDocFile) {
@@ -2577,7 +2424,7 @@ export function StudentFormView({
                 }}
               >
                 Simpan Dokumen
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
