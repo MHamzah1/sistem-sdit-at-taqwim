@@ -18,27 +18,59 @@ export async function readState(db: Database, actor: Actor) {
   const ids = linked.map((r) => r.studentId);
   const scoped = (column: AnyPgColumn) =>
     guardianOnly ? (ids.length ? inArray(column, ids) : sql`false`) : undefined;
-  const students = await db
-    .select({
-      id: s.students.id,
-      nis: s.students.nis,
-      nisn: s.students.nisn,
-      name: s.students.name,
-      gender: s.students.gender,
-      birthPlace: s.students.birthPlace,
-      birthDate: s.students.birthDate,
-      photoUrl: s.students.photoUrl,
-      classId: s.students.classId,
-      enrolledOn: s.students.enrolledOn,
-      active: s.students.active,
-      studentStatus: s.students.studentStatus,
-      nickname: s.students.nickname,
-      createdAt: s.students.createdAt,
-      updatedAt: s.students.updatedAt,
-    })
-    .from(s.students)
-    .where(scoped(s.students.id))
-    .orderBy(s.students.name);
+  let students: any[];
+  try {
+    students = await db
+      .select({
+        id: s.students.id,
+        nis: s.students.nis,
+        nisn: s.students.nisn,
+        name: s.students.name,
+        gender: s.students.gender,
+        birthPlace: s.students.birthPlace,
+        birthDate: s.students.birthDate,
+        photoUrl: s.students.photoUrl,
+        classId: s.students.classId,
+        enrolledOn: s.students.enrolledOn,
+        active: s.students.active,
+        studentStatus: s.students.studentStatus,
+        nickname: s.students.nickname,
+        createdAt: s.students.createdAt,
+        updatedAt: s.students.updatedAt,
+      })
+      .from(s.students)
+      .where(scoped(s.students.id))
+      .orderBy(s.students.name);
+  } catch (err: any) {
+    if (err?.code === "42703" || err?.cause?.code === "42703") {
+      const raw = await db
+        .select({
+          id: s.students.id,
+          nis: s.students.nis,
+          nisn: s.students.nisn,
+          name: s.students.name,
+          gender: s.students.gender,
+          birthPlace: s.students.birthPlace,
+          birthDate: s.students.birthDate,
+          photoUrl: s.students.photoUrl,
+          classId: s.students.classId,
+          enrolledOn: s.students.enrolledOn,
+          active: s.students.active,
+          createdAt: s.students.createdAt,
+          updatedAt: s.students.updatedAt,
+        })
+        .from(s.students)
+        .where(scoped(s.students.id))
+        .orderBy(s.students.name);
+      students = raw.map((std) => ({
+        ...std,
+        studentStatus: std.active ? "ACTIVE" : "INACTIVE",
+        nickname: null as string | null,
+      }));
+    } else {
+      throw err;
+    }
+  }
   const invoices = await db
     .select()
     .from(s.invoices)

@@ -847,6 +847,22 @@ export async function getStudentFullProfile(
   // Check permission / guardian scoping
   await ownStudent(db, actor, studentId);
 
+  const safeQuery = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err: any) {
+      if (
+        err?.code === "42P01" ||
+        err?.code === "42703" ||
+        err?.cause?.code === "42P01" ||
+        err?.cause?.code === "42703"
+      ) {
+        return fallback;
+      }
+      throw err;
+    }
+  };
+
   let student: any;
   try {
     const [row] = await db
@@ -855,62 +871,122 @@ export async function getStudentFullProfile(
       .where(eq(s.students.id, studentId));
     student = row;
   } catch (err: any) {
-    if (err?.code === "42P01" || err?.code === "42703") {
-      throw new HttpError(
-        503,
-        "SCHEMA_NOT_READY: Skema tabel/kolom database Master Siswa belum siap",
-      );
+    if (err?.code === "42703" || err?.cause?.code === "42703") {
+      const [baseRow] = await db
+        .select({
+          id: s.students.id,
+          nis: s.students.nis,
+          nisn: s.students.nisn,
+          name: s.students.name,
+          gender: s.students.gender,
+          birthPlace: s.students.birthPlace,
+          birthDate: s.students.birthDate,
+          photoUrl: s.students.photoUrl,
+          classId: s.students.classId,
+          enrolledOn: s.students.enrolledOn,
+          active: s.students.active,
+          createdAt: s.students.createdAt,
+          updatedAt: s.students.updatedAt,
+        })
+        .from(s.students)
+        .where(eq(s.students.id, studentId));
+      student = baseRow
+        ? {
+            ...baseRow,
+            nickname: null,
+            nik: null,
+            familyCardNumber: null,
+            birthCertificateNumber: null,
+            religion: "ISLAM",
+            citizenship: "WNI",
+            birthOrder: null,
+            siblingCount: null,
+            dailyLanguage: "INDONESIAN",
+            studentStatus: baseRow.active ? "ACTIVE" : "INACTIVE",
+          }
+        : null;
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   if (!student) throw new HttpError(404, "Siswa tidak ditemukan");
 
-  const addresses = await db
-    .select()
-    .from(s.studentAddresses)
-    .where(eq(s.studentAddresses.studentId, studentId));
+  const addresses = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentAddresses)
+        .where(eq(s.studentAddresses.studentId, studentId)),
+    [],
+  );
 
-  const enrollments = await db
-    .select()
-    .from(s.studentEnrollments)
-    .where(eq(s.studentEnrollments.studentId, studentId))
-    .orderBy(desc(s.studentEnrollments.createdAt));
+  const enrollments = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentEnrollments)
+        .where(eq(s.studentEnrollments.studentId, studentId))
+        .orderBy(desc(s.studentEnrollments.createdAt)),
+    [],
+  );
 
-  const familyRelations = await db
-    .select({
-      relation: s.studentFamilyMembers,
-      member: s.familyMembers,
-    })
-    .from(s.studentFamilyMembers)
-    .innerJoin(
-      s.familyMembers,
-      eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
-    )
-    .where(eq(s.studentFamilyMembers.studentId, studentId));
+  const familyRelations = await safeQuery(
+    () =>
+      db
+        .select({
+          relation: s.studentFamilyMembers,
+          member: s.familyMembers,
+        })
+        .from(s.studentFamilyMembers)
+        .innerJoin(
+          s.familyMembers,
+          eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
+        )
+        .where(eq(s.studentFamilyMembers.studentId, studentId)),
+    [],
+  );
 
-  const [health] = await db
-    .select()
-    .from(s.studentHealthProfiles)
-    .where(eq(s.studentHealthProfiles.studentId, studentId));
+  const health = await safeQuery(
+    async () => {
+      const [row] = await db
+        .select()
+        .from(s.studentHealthProfiles)
+        .where(eq(s.studentHealthProfiles.studentId, studentId));
+      return row || null;
+    },
+    null,
+  );
 
-  const measurements = await db
-    .select()
-    .from(s.studentPeriodicData)
-    .where(eq(s.studentPeriodicData.studentId, studentId))
-    .orderBy(desc(s.studentPeriodicData.measurementDate));
+  const measurements = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentPeriodicData)
+        .where(eq(s.studentPeriodicData.studentId, studentId))
+        .orderBy(desc(s.studentPeriodicData.measurementDate)),
+    [],
+  );
 
-  const aidRecords = await db
-    .select()
-    .from(s.studentAidRecords)
-    .where(eq(s.studentAidRecords.studentId, studentId))
-    .orderBy(desc(s.studentAidRecords.createdAt));
+  const aidRecords = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentAidRecords)
+        .where(eq(s.studentAidRecords.studentId, studentId))
+        .orderBy(desc(s.studentAidRecords.createdAt)),
+    [],
+  );
 
-  const documents = await db
-    .select()
-    .from(s.studentDocuments)
-    .where(eq(s.studentDocuments.studentId, studentId))
-    .orderBy(desc(s.studentDocuments.createdAt));
+  const documents = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentDocuments)
+        .where(eq(s.studentDocuments.studentId, studentId))
+        .orderBy(desc(s.studentDocuments.createdAt)),
+    [],
+  );
 
   // Submissions for Karakteristik Anak
   const submissions = await db
@@ -1053,10 +1129,44 @@ export async function updateStudentProfile(
 ) {
   allow(ctx.actor, "master");
 
-  const [existing] = await db
-    .select()
-    .from(s.students)
-    .where(eq(s.students.id, studentId));
+  let existing: any;
+  try {
+    const [row] = await db
+      .select()
+      .from(s.students)
+      .where(eq(s.students.id, studentId));
+    existing = row;
+  } catch (err: any) {
+    if (err?.code === "42703" || err?.cause?.code === "42703") {
+      const [baseRow] = await db
+        .select({
+          id: s.students.id,
+          nis: s.students.nis,
+          nisn: s.students.nisn,
+          name: s.students.name,
+          gender: s.students.gender,
+          birthPlace: s.students.birthPlace,
+          birthDate: s.students.birthDate,
+          photoUrl: s.students.photoUrl,
+          classId: s.students.classId,
+          enrolledOn: s.students.enrolledOn,
+          active: s.students.active,
+          createdAt: s.students.createdAt,
+          updatedAt: s.students.updatedAt,
+        })
+        .from(s.students)
+        .where(eq(s.students.id, studentId));
+      existing = baseRow
+        ? {
+            ...baseRow,
+            studentStatus: baseRow.active ? "ACTIVE" : "INACTIVE",
+            nik: null,
+          }
+        : null;
+    } else {
+      throw err;
+    }
+  }
   if (!existing) throw new HttpError(404, "Siswa tidak ditemukan");
 
   // Check NIS uniqueness if changed
