@@ -488,11 +488,11 @@ export async function createStudentAtomic(
   }
 
   // Check NIK uniqueness if provided
-  if (input.student.nik) {
+  if (input.student.nik && (s.students as any).nik) {
     const existingNik = await db
       .select({ id: s.students.id })
       .from(s.students)
-      .where(eq(s.students.nik, input.student.nik))
+      .where(eq((s.students as any).nik, input.student.nik))
       .limit(1);
     if (existingNik.length > 0) {
       throw new HttpError(409, `NIK ${input.student.nik} sudah digunakan siswa lain`);
@@ -501,30 +501,32 @@ export async function createStudentAtomic(
 
   return await db.transaction(async (tx) => {
     // 1. Insert Student
+    const studentValues: any = {
+      name: input.student.name,
+      nis: input.student.nis,
+      nisn: input.student.nisn,
+      gender: input.student.gender,
+      birthPlace: input.student.birthPlace,
+      birthDate: input.student.birthDate,
+      photoUrl: input.student.photoUrl,
+      classId: input.student.classId,
+      enrolledOn: input.student.enrolledOn,
+      active: input.student.active ?? true,
+    };
+    if ((s.students as any).nickname) studentValues.nickname = input.student.nickname;
+    if ((s.students as any).nik) studentValues.nik = input.student.nik;
+    if ((s.students as any).familyCardNumber) studentValues.familyCardNumber = input.student.familyCardNumber;
+    if ((s.students as any).birthCertificateNumber) studentValues.birthCertificateNumber = input.student.birthCertificateNumber;
+    if ((s.students as any).religion) studentValues.religion = input.student.religion;
+    if ((s.students as any).citizenship) studentValues.citizenship = input.student.citizenship || "WNI";
+    if ((s.students as any).birthOrder) studentValues.birthOrder = input.student.birthOrder;
+    if ((s.students as any).siblingCount) studentValues.siblingCount = input.student.siblingCount;
+    if ((s.students as any).dailyLanguage) studentValues.dailyLanguage = input.student.dailyLanguage;
+    if ((s.students as any).studentStatus) studentValues.studentStatus = input.student.studentStatus || "ACTIVE";
+
     const [createdStudent] = await tx
       .insert(s.students)
-      .values({
-        name: input.student.name,
-        nickname: input.student.nickname,
-        nis: input.student.nis,
-        nisn: input.student.nisn,
-        nik: input.student.nik,
-        familyCardNumber: input.student.familyCardNumber,
-        birthCertificateNumber: input.student.birthCertificateNumber,
-        gender: input.student.gender,
-        birthPlace: input.student.birthPlace,
-        birthDate: input.student.birthDate,
-        photoUrl: input.student.photoUrl,
-        religion: input.student.religion,
-        citizenship: input.student.citizenship || "WNI",
-        birthOrder: input.student.birthOrder,
-        siblingCount: input.student.siblingCount,
-        dailyLanguage: input.student.dailyLanguage,
-        classId: input.student.classId,
-        enrolledOn: input.student.enrolledOn,
-        studentStatus: input.student.studentStatus || "ACTIVE",
-        active: input.student.active ?? true,
-      })
+      .values(studentValues)
       .returning();
 
     const studentId = createdStudent.id;
@@ -711,60 +713,121 @@ export async function getStudentFullProfile(
   // Check permission / guardian scoping
   await ownStudent(db, actor, studentId);
 
-  const [student] = await db
-    .select()
-    .from(s.students)
-    .where(eq(s.students.id, studentId));
+  const safeQuery = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err: any) {
+      if (err?.code === "42P01" || err?.code === "42703") return fallback;
+      throw err;
+    }
+  };
+
+  let student: any;
+  try {
+    const [row] = await db
+      .select({
+        id: s.students.id,
+        nis: s.students.nis,
+        nisn: s.students.nisn,
+        name: s.students.name,
+        gender: s.students.gender,
+        birthPlace: s.students.birthPlace,
+        birthDate: s.students.birthDate,
+        photoUrl: s.students.photoUrl,
+        classId: s.students.classId,
+        enrolledOn: s.students.enrolledOn,
+        active: s.students.active,
+        createdAt: s.students.createdAt,
+        updatedAt: s.students.updatedAt,
+      })
+      .from(s.students)
+      .where(eq(s.students.id, studentId));
+    student = row;
+  } catch (err) {
+    const [row] = await db
+      .select()
+      .from(s.students)
+      .where(eq(s.students.id, studentId));
+    student = row;
+  }
 
   if (!student) throw new HttpError(404, "Siswa tidak ditemukan");
 
-  const addresses = await db
-    .select()
-    .from(s.studentAddresses)
-    .where(eq(s.studentAddresses.studentId, studentId));
+  const addresses = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentAddresses)
+        .where(eq(s.studentAddresses.studentId, studentId)),
+    [],
+  );
 
-  const enrollments = await db
-    .select()
-    .from(s.studentEnrollments)
-    .where(eq(s.studentEnrollments.studentId, studentId))
-    .orderBy(desc(s.studentEnrollments.createdAt));
+  const enrollments = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentEnrollments)
+        .where(eq(s.studentEnrollments.studentId, studentId))
+        .orderBy(desc(s.studentEnrollments.createdAt)),
+    [],
+  );
 
-  const familyRelations = await db
-    .select({
-      relation: s.studentFamilyMembers,
-      member: s.familyMembers,
-    })
-    .from(s.studentFamilyMembers)
-    .innerJoin(
-      s.familyMembers,
-      eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
-    )
-    .where(eq(s.studentFamilyMembers.studentId, studentId));
+  const familyRelations = await safeQuery(
+    () =>
+      db
+        .select({
+          relation: s.studentFamilyMembers,
+          member: s.familyMembers,
+        })
+        .from(s.studentFamilyMembers)
+        .innerJoin(
+          s.familyMembers,
+          eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
+        )
+        .where(eq(s.studentFamilyMembers.studentId, studentId)),
+    [],
+  );
 
-  const health = (
-    await db
-      .select()
-      .from(s.studentHealthProfiles)
-      .where(eq(s.studentHealthProfiles.studentId, studentId))
-  )[0] || null;
+  const health = await safeQuery(
+    async () =>
+      (
+        await db
+          .select()
+          .from(s.studentHealthProfiles)
+          .where(eq(s.studentHealthProfiles.studentId, studentId))
+      )[0] || null,
+    null,
+  );
 
-  const measurements = await db
-    .select()
-    .from(s.studentPeriodicData)
-    .where(eq(s.studentPeriodicData.studentId, studentId))
-    .orderBy(desc(s.studentPeriodicData.measurementDate));
+  const measurements = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentPeriodicData)
+        .where(eq(s.studentPeriodicData.studentId, studentId))
+        .orderBy(desc(s.studentPeriodicData.measurementDate)),
+    [],
+  );
 
-  const aidRecords = await db
-    .select()
-    .from(s.studentAidRecords)
-    .where(eq(s.studentAidRecords.studentId, studentId))
-    .orderBy(desc(s.studentAidRecords.createdAt));
+  const aidRecords = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentAidRecords)
+        .where(eq(s.studentAidRecords.studentId, studentId))
+        .orderBy(desc(s.studentAidRecords.createdAt)),
+    [],
+  );
 
-  const documents = await db
-    .select()
-    .from(s.studentDocuments)
-    .where(eq(s.studentDocuments.studentId, studentId))
-    .orderBy(desc(s.studentDocuments.createdAt));
+  const documents = await safeQuery(
+    () =>
+      db
+        .select()
+        .from(s.studentDocuments)
+        .where(eq(s.studentDocuments.studentId, studentId))
+        .orderBy(desc(s.studentDocuments.createdAt)),
+    [],
+  );
 
   // Linked guardians (portal)
   const portalGuardians = await db
@@ -875,11 +938,11 @@ export async function updateStudentProfile(
   }
 
   // Check NIK uniqueness if changed
-  if (input.student.nik && input.student.nik !== existing.nik) {
+  if (input.student.nik && (s.students as any).nik && input.student.nik !== (existing as any).nik) {
     const dupNik = await db
       .select({ id: s.students.id })
       .from(s.students)
-      .where(eq(s.students.nik, input.student.nik))
+      .where(eq((s.students as any).nik, input.student.nik))
       .limit(1);
     if (dupNik.length > 0 && dupNik[0].id !== studentId) {
       throw new HttpError(409, `NIK ${input.student.nik} sudah digunakan siswa lain`);
@@ -888,29 +951,31 @@ export async function updateStudentProfile(
 
   return await db.transaction(async (tx) => {
     // 1. Update Student core fields
+    const studentUpdateValues: any = {
+      name: input.student.name,
+      nis: input.student.nis,
+      nisn: input.student.nisn,
+      gender: input.student.gender,
+      birthPlace: input.student.birthPlace,
+      birthDate: input.student.birthDate,
+      photoUrl: input.student.photoUrl,
+      active: input.student.active ?? existing.active,
+      updatedAt: new Date(),
+    };
+    if ((s.students as any).nickname) studentUpdateValues.nickname = input.student.nickname;
+    if ((s.students as any).nik) studentUpdateValues.nik = input.student.nik;
+    if ((s.students as any).familyCardNumber) studentUpdateValues.familyCardNumber = input.student.familyCardNumber;
+    if ((s.students as any).birthCertificateNumber) studentUpdateValues.birthCertificateNumber = input.student.birthCertificateNumber;
+    if ((s.students as any).religion) studentUpdateValues.religion = input.student.religion;
+    if ((s.students as any).citizenship) studentUpdateValues.citizenship = input.student.citizenship || "WNI";
+    if ((s.students as any).birthOrder) studentUpdateValues.birthOrder = input.student.birthOrder;
+    if ((s.students as any).siblingCount) studentUpdateValues.siblingCount = input.student.siblingCount;
+    if ((s.students as any).dailyLanguage) studentUpdateValues.dailyLanguage = input.student.dailyLanguage;
+    if ((s.students as any).studentStatus) studentUpdateValues.studentStatus = input.student.studentStatus || (existing as any).studentStatus;
+
     const [updated] = await tx
       .update(s.students)
-      .set({
-        name: input.student.name,
-        nickname: input.student.nickname,
-        nis: input.student.nis,
-        nisn: input.student.nisn,
-        nik: input.student.nik,
-        familyCardNumber: input.student.familyCardNumber,
-        birthCertificateNumber: input.student.birthCertificateNumber,
-        gender: input.student.gender,
-        birthPlace: input.student.birthPlace,
-        birthDate: input.student.birthDate,
-        photoUrl: input.student.photoUrl,
-        religion: input.student.religion,
-        citizenship: input.student.citizenship || "WNI",
-        birthOrder: input.student.birthOrder,
-        siblingCount: input.student.siblingCount,
-        dailyLanguage: input.student.dailyLanguage,
-        studentStatus: input.student.studentStatus || existing.studentStatus,
-        active: input.student.active ?? existing.active,
-        updatedAt: new Date(),
-      })
+      .set(studentUpdateValues)
       .where(eq(s.students.id, studentId))
       .returning();
 
@@ -1029,11 +1094,16 @@ export async function saveStudentDraft(
 
 export async function getStudentDrafts(db: Database, actor: Actor) {
   allow(actor, "master");
-  return await db
-    .select()
-    .from(s.studentDrafts)
-    .where(and(eq(s.studentDrafts.userId, actor.id), eq(s.studentDrafts.status, "DRAFT")))
-    .orderBy(desc(s.studentDrafts.updatedAt));
+  try {
+    return await db
+      .select()
+      .from(s.studentDrafts)
+      .where(and(eq(s.studentDrafts.userId, actor.id), eq(s.studentDrafts.status, "DRAFT")))
+      .orderBy(desc(s.studentDrafts.updatedAt));
+  } catch (err: any) {
+    if (err?.code === "42P01" || err?.code === "42703") return [];
+    throw err;
+  }
 }
 
 export async function getStudentDraftById(
@@ -1239,25 +1309,30 @@ export async function requestProfileChange(
 
 export async function getProfileChangeRequests(db: Database, actor: Actor) {
   allow(actor, "master");
-  return await db
-    .select({
-      request: s.studentProfileChangeRequests,
-      student: {
-        id: s.students.id,
-        name: s.students.name,
-        nis: s.students.nis,
-      },
-      user: {
-        id: s.users.id,
-        name: s.users.name,
-        email: s.users.email,
-      },
-    })
-    .from(s.studentProfileChangeRequests)
-    .innerJoin(s.students, eq(s.students.id, s.studentProfileChangeRequests.studentId))
-    .innerJoin(s.users, eq(s.users.id, s.studentProfileChangeRequests.requestedBy))
-    .where(eq(s.studentProfileChangeRequests.status, "SUBMITTED"))
-    .orderBy(desc(s.studentProfileChangeRequests.createdAt));
+  try {
+    return await db
+      .select({
+        request: s.studentProfileChangeRequests,
+        student: {
+          id: s.students.id,
+          name: s.students.name,
+          nis: s.students.nis,
+        },
+        user: {
+          id: s.users.id,
+          name: s.users.name,
+          email: s.users.email,
+        },
+      })
+      .from(s.studentProfileChangeRequests)
+      .innerJoin(s.students, eq(s.students.id, s.studentProfileChangeRequests.studentId))
+      .innerJoin(s.users, eq(s.users.id, s.studentProfileChangeRequests.requestedBy))
+      .where(eq(s.studentProfileChangeRequests.status, "SUBMITTED"))
+      .orderBy(desc(s.studentProfileChangeRequests.createdAt));
+  } catch (err: any) {
+    if (err?.code === "42P01" || err?.code === "42703") return [];
+    throw err;
+  }
 }
 
 export async function reviewProfileChange(
@@ -1292,7 +1367,7 @@ export async function reviewProfileChange(
       ];
       const studentUpdate: Record<string, any> = {};
       for (const key of allowedStudentFields) {
-        if (patch[key] !== undefined) studentUpdate[key] = patch[key];
+        if (patch[key] !== undefined && (s.students as any)[key]) studentUpdate[key] = patch[key];
       }
       if (Object.keys(studentUpdate).length > 0) {
         studentUpdate.updatedAt = new Date();

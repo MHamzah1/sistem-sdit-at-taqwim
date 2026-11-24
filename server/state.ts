@@ -18,7 +18,7 @@ export async function readState(db: Database, actor: Actor) {
   const ids = linked.map((r) => r.studentId);
   const scoped = (column: AnyPgColumn) =>
     guardianOnly ? (ids.length ? inArray(column, ids) : sql`false`) : undefined;
-  const students = await db
+  const rawStudents = await db
     .select({
       id: s.students.id,
       nis: s.students.nis,
@@ -31,14 +31,17 @@ export async function readState(db: Database, actor: Actor) {
       classId: s.students.classId,
       enrolledOn: s.students.enrolledOn,
       active: s.students.active,
-      studentStatus: s.students.studentStatus,
-      nickname: s.students.nickname,
       createdAt: s.students.createdAt,
       updatedAt: s.students.updatedAt,
     })
     .from(s.students)
     .where(scoped(s.students.id))
     .orderBy(s.students.name);
+  const students = rawStudents.map((std) => ({
+    ...std,
+    studentStatus: std.active ? "ACTIVE" : "INACTIVE",
+    nickname: null as string | null,
+  }));
   const invoices = await db
     .select()
     .from(s.invoices)

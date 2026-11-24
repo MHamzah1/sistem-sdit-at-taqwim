@@ -101,13 +101,13 @@ export default function MasterSiswaPage() {
   useEffect(() => {
     fetch("/api/student-drafts")
       .then((res) => (res.ok ? res.json() : { drafts: [] }))
-      .then((data) => setDrafts(data.drafts || []))
-      .catch(() => {});
+      .then((data) => setDrafts(data.drafts || (Array.isArray(data) ? data : [])))
+      .catch(() => setDrafts([]));
 
     fetch("/api/student-profile-change-requests")
       .then((res) => (res.ok ? res.json() : { requests: [] }))
-      .then((data) => setChangeRequests(data.requests || []))
-      .catch(() => {});
+      .then((data) => setChangeRequests(data.requests || (Array.isArray(data) ? data : [])))
+      .catch(() => setChangeRequests([]));
   }, []);
 
   const pendingRequests = useMemo(

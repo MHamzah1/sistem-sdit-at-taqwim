@@ -252,7 +252,10 @@ export async function handle(
       return json(await searchFamilyMembers(db, actor, url.searchParams.get("q") || ""));
     }
     if (path === "student-drafts") {
-      if (method === "GET") return json(await getStudentDrafts(db, actor));
+      if (method === "GET") {
+        const drafts = await getStudentDrafts(db, actor);
+        return json({ drafts });
+      }
       if (method === "POST") return json(await saveStudentDraft(db, actor, await payload(request)), 201);
     }
     let draftMatch = /^student-drafts\/([^/]+)$/.exec(path);
@@ -274,10 +277,11 @@ export async function handle(
       const sId = uuid.parse(studentMatch[1]);
       return json(await requestProfileChange(db, ctx, sId, await payload(request)), 201);
     }
-    if (path === "student-change-requests" && method === "GET") {
-      return json(await getProfileChangeRequests(db, actor));
+    if ((path === "student-change-requests" || path === "student-profile-change-requests") && method === "GET") {
+      const requests = await getProfileChangeRequests(db, actor);
+      return json({ requests });
     }
-    let changeMatch = /^student-change-requests\/([^/]+)\/review$/.exec(path);
+    let changeMatch = /^(?:student-change-requests|student-profile-change-requests)\/([^/]+)\/review$/.exec(path);
     if (changeMatch && method === "POST") {
       const rId = uuid.parse(changeMatch[1]);
       const body = z
