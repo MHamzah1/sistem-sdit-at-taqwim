@@ -5,6 +5,7 @@ import { User, QrCode as QrIcon } from "lucide-react";
 import { Badge } from "@/src/components/Badge";
 import { formatDateIndo } from "@/src/lib/formatters";
 import { cn } from "@/src/lib/utils";
+import { getStudentPhotoUrl } from "@/src/lib/api";
 
 export interface ExamCardStudent {
   id: string;
@@ -136,9 +137,9 @@ export function ExamCardView({
         <div className="sm:col-span-5 flex items-center justify-center sm:justify-end gap-2.5">
           {/* Pas Foto 3x4 */}
           <div className="exam-card-photo-box shrink-0 w-[78px] h-[104px] rounded-md border-2 border-emerald-800/80 bg-slate-50 overflow-hidden shadow-xs flex flex-col items-center justify-center text-center p-1">
-            {student.photoUrl ? (
+            {getStudentPhotoUrl(student) ? (
               <img
-                src={student.photoUrl}
+                src={getStudentPhotoUrl(student)!}
                 alt={`Pas foto ${student.name}`}
                 className="w-full h-full object-cover rounded-xs"
                 onError={(e) => {

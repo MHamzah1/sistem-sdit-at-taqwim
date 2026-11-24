@@ -52,7 +52,7 @@ import { Badge } from "@/src/components/Badge";
 import { CopyButton } from "@/src/components/CopyButton";
 import { Button } from "@/src/components/ui/button";
 import { ExamCardView } from "@/src/components/cards";
-import { api } from "@/src/lib/api";
+import { api, getStudentPhotoUrl } from "@/src/lib/api";
 
 type Student = AppState["students"][number];
 type ClassItem = AppState["classes"][number];
@@ -403,9 +403,9 @@ export function StudentDetailView({
       <div className="st-idcard-grid no-print">
         <section className="st-profile-card">
           <div className="st-profile-card__avatar">
-            {student.photoUrl ? (
+            {getStudentPhotoUrl(student) ? (
               <img
-                src={student.photoUrl}
+                src={getStudentPhotoUrl(student)!}
                 alt={student.name}
                 className="st-profile-avatar-img"
                 onError={(e) => {

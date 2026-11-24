@@ -22,6 +22,17 @@ import {
   type Context,
 } from "./security";
 import { date, uuid, normalizePhone } from "./business";
+import { verifyStudentFile } from "./files";
+import {
+  calculateStudentCompleteness,
+  type StudentCompletenessInput,
+  type StudentCompletenessResult,
+} from "../src/lib/completeness";
+export {
+  calculateStudentCompleteness,
+  type StudentCompletenessInput,
+  type StudentCompletenessResult,
+};
 
 // --- Enums & Constants ---
 export const GENDERS = ["L", "P"] as const;
@@ -378,189 +389,6 @@ export const fullStudentProfileSchema = z.object({
   draftId: uuid.nullable().optional(),
 });
 
-// --- Completeness Calculation Engine ---
-export function calculateStudentCompleteness(data: {
-  student: {
-    name?: string | null;
-    nis?: string | null;
-    nik?: string | null;
-    familyCardNumber?: string | null;
-    gender?: string | null;
-    birthPlace?: string | null;
-    birthDate?: string | null;
-    nisn?: string | null;
-  };
-  address?: {
-    address?: string | null;
-    province?: string | null;
-    regency?: string | null;
-    district?: string | null;
-    village?: string | null;
-    transportationType?: string | null;
-  } | null;
-  addresses?: Array<any> | null;
-  registration?: {
-    enrolledOn?: string | null;
-    classId?: string | null;
-  } | null;
-  father?: { fullName?: string | null; lifeStatus?: string | null } | null;
-  mother?: { fullName?: string | null; lifeStatus?: string | null } | null;
-  family?: any;
-  emergencyContact?: { name?: string | null; phone?: string | null } | null;
-  health?: { bloodType?: string | null } | null;
-  characteristic?: { status?: string } | null;
-  aidRecords?: Array<{ aidType: string; status: string }> | null;
-  aid?: Array<any> | null;
-  documents?: Array<{ documentType: string; verificationStatus: string }>;
-}) {
-  const sections: Record<
-    string,
-    { status: "COMPLETE" | "INCOMPLETE" | "NOT_APPLICABLE"; missing: string[] }
-  > = {};
-
-  const resolvedAddr =
-    data.address ||
-    (Array.isArray(data.addresses)
-      ? data.addresses.find((a: any) => a.addressType === "IDENTITY") ||
-        data.addresses[0]
-      : null);
-  const resolvedFather = data.father || data.family?.father;
-  const resolvedMother = data.mother || data.family?.mother;
-  const resolvedEmergency =
-    data.emergencyContact || data.family?.emergencyContact;
-
-  // 1. Identitas
-  const identMissing: string[] = [];
-  if (!data.student.name) identMissing.push("Nama Lengkap");
-  if (!data.student.nis) identMissing.push("NIS");
-  if (!data.student.nik) identMissing.push("NIK (16 digit)");
-  if (!data.student.gender) identMissing.push("Jenis Kelamin");
-  if (!data.student.birthDate) identMissing.push("Tanggal Lahir");
-  sections["identitas"] = {
-    status: identMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-    missing: identMissing,
-  };
-
-  // 2. Alamat
-  const addrMissing: string[] = [];
-  if (!resolvedAddr?.address) addrMissing.push("Alamat Jalan / Tempat Tinggal");
-  if (!resolvedAddr?.regency) addrMissing.push("Kota / Kabupaten");
-  if (!resolvedAddr?.transportationType) addrMissing.push("Moda Transportasi");
-  sections["alamat"] = {
-    status: addrMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-    missing: addrMissing,
-  };
-
-  // 3. Registrasi
-  const regMissing: string[] = [];
-  if (!data.registration?.classId) regMissing.push("Kelas Penempatan");
-  if (!data.registration?.enrolledOn) regMissing.push("Tanggal Masuk");
-  sections["registrasi"] = {
-    status: regMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-    missing: regMissing,
-  };
-
-  // 4. Data Ayah
-  const fatherMissing: string[] = [];
-  if (resolvedFather?.lifeStatus === "DECEASED") {
-    sections["ayah"] = { status: "COMPLETE", missing: [] };
-  } else {
-    if (!resolvedFather?.fullName) fatherMissing.push("Nama Lengkap Ayah");
-    sections["ayah"] = {
-      status: fatherMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-      missing: fatherMissing,
-    };
-  }
-
-  // 5. Data Ibu
-  const motherMissing: string[] = [];
-  if (resolvedMother?.lifeStatus === "DECEASED") {
-    sections["ibu"] = { status: "COMPLETE", missing: [] };
-  } else {
-    if (!resolvedMother?.fullName) motherMissing.push("Nama Lengkap Ibu");
-    sections["ibu"] = {
-      status: motherMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-      missing: motherMissing,
-    };
-  }
-
-  // 6. Wali & Kontak Darurat
-  const emMissing: string[] = [];
-  if (!resolvedEmergency?.name) emMissing.push("Nama Kontak Darurat");
-  if (!resolvedEmergency?.phone) emMissing.push("Nomor Telepon Darurat");
-  sections["wali_darurat"] = {
-    status: emMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-    missing: emMissing,
-  };
-
-  // 7. Kesehatan
-  sections["kesehatan"] = {
-    status: data.health?.bloodType && data.health.bloodType !== "UNKNOWN" ? "COMPLETE" : "INCOMPLETE",
-    missing: data.health?.bloodType && data.health.bloodType !== "UNKNOWN" ? [] : ["Golongan Darah"],
-  };
-
-  // 8. Bantuan Pendidikan (Opsional, status selalu terpenuhi jika ada / tidak ada)
-  sections["bantuan"] = {
-    status: "COMPLETE",
-    missing: [],
-  };
-
-  // 9. Karakteristik
-  const charStatus = data.characteristic?.status || (data as any).characteristicStatus;
-  if (charStatus === "EMPTY") {
-    sections["karakteristik"] = {
-      status: "INCOMPLETE",
-      missing: ["Kuesioner karakteristik santri belum diisi"],
-    };
-  } else {
-    sections["karakteristik"] = {
-      status: "COMPLETE",
-      missing: [],
-    };
-  }
-
-  // 10. Dokumen (KK, Akta Kelahiran, Pas Foto)
-  const coreDocs = ["KK", "AKTA_KELAHIRAN", "PAS_FOTO"];
-  const verifiedDocs = (data.documents || [])
-    .filter((d) => d.verificationStatus === "VERIFIED")
-    .map((d) => d.documentType);
-  const docMissing = coreDocs.filter((cd) => !verifiedDocs.includes(cd));
-  sections["dokumen"] = {
-    status: docMissing.length === 0 ? "COMPLETE" : "INCOMPLETE",
-    missing: docMissing.map((d) => `Dokumen ${d} belum terverifikasi`),
-  };
-
-  const sectionKeys = Object.keys(sections);
-  const total = sectionKeys.length;
-  const completed = sectionKeys.filter(
-    (k) => sections[k].status === "COMPLETE",
-  ).length;
-  const percentage = Math.round((completed / total) * 100);
-
-  const missingFields: string[] = [];
-  for (const s of Object.values(sections)) {
-    missingFields.push(...s.missing);
-  }
-
-  return {
-    percentage,
-    overallPercent: percentage,
-    completed,
-    total,
-    applicableCount: total,
-    completedCount: completed,
-    sections,
-    isComplete: completed === total,
-    missingFields,
-    documentSummary: {
-      totalDocsCount: (data.documents || []).length,
-      verifiedDocsCount: verifiedDocs.length,
-    },
-    verifiedDocsCount: verifiedDocs.length,
-    totalDocsCount: (data.documents || []).length,
-  };
-}
-
 // --- Masking Helpers ---
 export function maskNik(nik: string | null | undefined): string {
   if (!nik) return "-";
@@ -834,6 +662,7 @@ export async function createStudentAtomic(
           aidSource: item.aidSource,
           startDate: item.startDate,
           endDate: item.endDate,
+          amount: item.amount ?? null,
           status: item.status || "ACTIVE",
           notes: item.notes,
         });
@@ -850,6 +679,9 @@ export async function createStudentAtomic(
           measurementDate: m.measurementDate,
           heightCm: m.heightCm.toString(),
           weightKg: m.weightKg.toString(),
+          headCircumferenceCm: m.headCircumferenceCm
+            ? m.headCircumferenceCm.toString()
+            : null,
           notes: m.notes,
           recordedBy: ctx.actor.id,
         });
@@ -878,6 +710,11 @@ export async function createStudentAtomic(
             "FORBIDDEN",
           );
         }
+        await verifyStudentFile(
+          d.storagePath,
+          ["image/jpeg", "image/png", "image/webp", "application/pdf"],
+          5 * 1024 * 1024,
+        );
         await tx.insert(s.studentDocuments).values({
           studentId,
           documentType: d.documentType,
@@ -1581,6 +1418,9 @@ export async function updateStudentProfile(
               measurementDate: m.measurementDate,
               heightCm: m.heightCm.toString(),
               weightKg: m.weightKg.toString(),
+              headCircumferenceCm: m.headCircumferenceCm
+                ? m.headCircumferenceCm.toString()
+                : null,
               notes: m.notes,
               updatedAt: new Date(),
             })
@@ -1598,6 +1438,7 @@ export async function updateStudentProfile(
             );
           }
         } else {
+          // Idempotent insert: only skip/reuse if an EXACT identical measurement exists
           const [existingM] = await tx
             .select()
             .from(s.studentPeriodicData)
@@ -1606,15 +1447,18 @@ export async function updateStudentProfile(
                 eq(s.studentPeriodicData.studentId, studentId),
                 eq(s.studentPeriodicData.measurementDate, m.measurementDate),
                 eq(s.studentPeriodicData.semester, m.semester || 1),
+                eq(s.studentPeriodicData.heightCm, m.heightCm.toString()),
+                eq(s.studentPeriodicData.weightKg, m.weightKg.toString()),
               ),
             );
           if (existingM) {
             await tx
               .update(s.studentPeriodicData)
               .set({
-                heightCm: m.heightCm.toString(),
-                weightKg: m.weightKg.toString(),
-                notes: m.notes,
+                headCircumferenceCm: m.headCircumferenceCm
+                  ? m.headCircumferenceCm.toString()
+                  : existingM.headCircumferenceCm,
+                notes: m.notes || existingM.notes,
                 updatedAt: new Date(),
               })
               .where(eq(s.studentPeriodicData.id, existingM.id));
@@ -1626,6 +1470,9 @@ export async function updateStudentProfile(
               measurementDate: m.measurementDate,
               heightCm: m.heightCm.toString(),
               weightKg: m.weightKg.toString(),
+              headCircumferenceCm: m.headCircumferenceCm
+                ? m.headCircumferenceCm.toString()
+                : null,
               notes: m.notes,
               recordedBy: ctx.actor.id,
             });
@@ -1646,6 +1493,7 @@ export async function updateStudentProfile(
               aidSource: a.aidSource,
               startDate: a.startDate,
               endDate: a.endDate,
+              amount: a.amount ?? null,
               status: a.status || "ACTIVE",
               notes: a.notes,
               updatedAt: new Date(),
@@ -1670,28 +1518,24 @@ export async function updateStudentProfile(
           ];
           if (a.aidNumber) {
             aidConds.push(eq(s.studentAidRecords.aidNumber, a.aidNumber));
-          } else {
-            aidConds.push(
-              or(
-                isNull(s.studentAidRecords.aidNumber),
-                eq(s.studentAidRecords.aidNumber, ""),
-              )!,
-            );
-            if (a.aidSource) {
-              aidConds.push(eq(s.studentAidRecords.aidSource, a.aidSource));
-            }
+          } else if (a.aidSource) {
+            aidConds.push(eq(s.studentAidRecords.aidSource, a.aidSource));
           }
           const [existingA] = await tx
             .select()
             .from(s.studentAidRecords)
             .where(and(...aidConds));
-          if (existingA) {
+          if (
+            existingA &&
+            existingA.aidNumber === a.aidNumber &&
+            existingA.aidSource === a.aidSource
+          ) {
             await tx
               .update(s.studentAidRecords)
               .set({
-                aidSource: a.aidSource,
                 startDate: a.startDate,
                 endDate: a.endDate,
+                amount: a.amount ?? existingA.amount,
                 status: a.status || "ACTIVE",
                 notes: a.notes,
                 updatedAt: new Date(),
@@ -1705,6 +1549,7 @@ export async function updateStudentProfile(
               aidSource: a.aidSource,
               startDate: a.startDate,
               endDate: a.endDate,
+              amount: a.amount ?? null,
               status: a.status || "ACTIVE",
               notes: a.notes,
             });
@@ -1830,6 +1675,9 @@ export async function addPeriodicMeasurement(
       measurementDate: data.measurementDate,
       heightCm: data.heightCm.toString(),
       weightKg: data.weightKg.toString(),
+      headCircumferenceCm: data.headCircumferenceCm
+        ? data.headCircumferenceCm.toString()
+        : null,
       notes: data.notes,
       recordedBy: ctx.actor.id,
     })
@@ -1856,6 +1704,7 @@ export async function addStudentAid(
       aidSource: data.aidSource,
       startDate: data.startDate,
       endDate: data.endDate,
+      amount: data.amount ?? null,
       status: data.status || "ACTIVE",
       notes: data.notes,
     })
@@ -1894,6 +1743,12 @@ export async function registerStudentDocument(
   if (!data.storagePath.startsWith(`student-documents/${ctx.actor.id}/`)) {
     throw new HttpError(422, "Jalur penyimpanan dokumen tidak sah");
   }
+
+  await verifyStudentFile(
+    data.storagePath,
+    ["image/jpeg", "image/png", "image/webp", "application/pdf"],
+    5 * 1024 * 1024,
+  );
 
   const [created] = await db
     .insert(s.studentDocuments)
@@ -2281,15 +2136,28 @@ export type ImportRowPreview = {
   motherName: string | null;
   guardianPhone: string | null;
   address: string | null;
+  enrolledOn: string | null;
   isValid: boolean;
   errors: string[];
 };
+
+function getAuthSecret(): string {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret || secret.trim() === "") {
+    throw new HttpError(
+      500,
+      "Konfigurasi server tidak lengkap: AUTH_SECRET wajib diset",
+      "CONFIG_ERROR",
+    );
+  }
+  return secret;
+}
 
 export function generateImportPreviewToken(
   actorId: string,
   validRows: any[],
 ): string {
-  const secret = process.env.AUTH_SECRET || "sdit-at-taqwim-secret-key-default";
+  const secret = getAuthSecret();
   const contentHash = createHash("sha256")
     .update(JSON.stringify(validRows))
     .digest("hex");
@@ -2304,9 +2172,8 @@ export function verifyImportPreviewToken(
   actorId: string,
   rows: any[],
 ): boolean {
+  const secret = getAuthSecret();
   try {
-    const secret =
-      process.env.AUTH_SECRET || "sdit-at-taqwim-secret-key-default";
     const decoded = Buffer.from(token, "base64url").toString("utf-8");
     const parts = decoded.split(":");
     if (parts.length !== 5) return false;
@@ -2364,16 +2231,25 @@ export async function previewStudentImport(
       .map((st) => st.nik!.trim().toLowerCase()),
   );
 
+  const activeYears = await db
+    .select({ id: s.academicYears.id })
+    .from(s.academicYears)
+    .where(eq(s.academicYears.active, true));
+  const activeYearIds = new Set(activeYears.map((y) => y.id));
+
   const classes = await db.select().from(s.classes);
-  const classMap = new Map<string, string>();
-  classes.forEach((c) => {
-    classMap.set(c.name.trim().toLowerCase(), c.id);
-  });
+  const classesByName = new Map<string, typeof classes>();
+  for (const c of classes) {
+    const key = c.name.trim().toLowerCase();
+    if (!classesByName.has(key)) classesByName.set(key, []);
+    classesByName.get(key)!.push(c);
+  }
 
   const fileNisSet = new Set<string>();
   const fileNisnSet = new Set<string>();
   const fileNikSet = new Set<string>();
   const previewRows: ImportRowPreview[] = [];
+  const todayStr = new Date().toISOString().split("T")[0];
 
   for (let i = 0; i < inputRows.length; i++) {
     const raw = inputRows[i];
@@ -2436,6 +2312,53 @@ export async function previewStudentImport(
       null;
     const address = (raw["ALAMAT"] || raw["address"] || "").trim() || null;
 
+    // Parse enrolledOn date
+    const rawEnrolledOn = (
+      raw["TANGGAL_MASUK"] ||
+      raw["TANGGAL_DITERIMA"] ||
+      raw["MASUK"] ||
+      raw["enrolledOn"] ||
+      ""
+    ).trim();
+
+    let enrolledOn: string = todayStr;
+    if (rawEnrolledOn) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(rawEnrolledOn)) {
+        const d = new Date(rawEnrolledOn + "T00:00:00Z");
+        if (!isNaN(d.getTime())) {
+          enrolledOn = rawEnrolledOn;
+        } else {
+          errors.push(`Format tanggal masuk "${rawEnrolledOn}" tidak valid`);
+        }
+      } else if (/^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(rawEnrolledOn)) {
+        const parts = rawEnrolledOn.split(/[/-]/);
+        const day = parts[0].padStart(2, "0");
+        const month = parts[1].padStart(2, "0");
+        const year = parts[2];
+        const iso = `${year}-${month}-${day}`;
+        const d = new Date(iso + "T00:00:00Z");
+        if (!isNaN(d.getTime())) {
+          enrolledOn = iso;
+        } else {
+          errors.push(`Format tanggal masuk "${rawEnrolledOn}" tidak valid`);
+        }
+      } else if (/^\d+$/.test(rawEnrolledOn)) {
+        const serial = Number(rawEnrolledOn);
+        if (serial > 10000 && serial < 100000) {
+          const utcDays = Math.floor(serial - 25569);
+          const utcValue = utcDays * 86400;
+          const dateInfo = new Date(utcValue * 1000);
+          enrolledOn = dateInfo.toISOString().split("T")[0];
+        } else {
+          errors.push(`Serial tanggal masuk "${rawEnrolledOn}" tidak valid`);
+        }
+      } else {
+        errors.push(
+          `Format tanggal masuk "${rawEnrolledOn}" tidak valid (gunakan DD/MM/YYYY atau YYYY-MM-DD)`,
+        );
+      }
+    }
+
     if (!nis) {
       errors.push("NIS wajib diisi");
     } else {
@@ -2492,11 +2415,28 @@ export async function previewStudentImport(
     if (!className) {
       errors.push("Nama kelas wajib diisi");
     } else {
-      resolvedClassId = classMap.get(className.toLowerCase()) || null;
-      if (!resolvedClassId) {
+      const matches = classesByName.get(className.toLowerCase()) || [];
+      if (matches.length === 0) {
         errors.push(
           `Kelas "${className}" tidak ditemukan pada daftar kelas aktif`,
         );
+      } else if (matches.length === 1) {
+        resolvedClassId = matches[0].id;
+      } else {
+        const inActiveYear = matches.filter(
+          (c) => c.academicYearId && activeYearIds.has(c.academicYearId),
+        );
+        if (inActiveYear.length === 1) {
+          resolvedClassId = inActiveYear[0].id;
+        } else if (inActiveYear.length > 1) {
+          errors.push(
+            `Kelas "${className}" bersifat ambigu (terdapat lebih dari 1 kelas dengan nama sama pada tahun ajaran aktif). Harap periksa konfigurasi kelas.`,
+          );
+        } else {
+          errors.push(
+            `Kelas "${className}" bersifat ambigu (terdapat di beberapa tahun ajaran dan tidak ada yang berada pada tahun ajaran aktif). Harap periksa konfigurasi kelas.`,
+          );
+        }
       }
     }
 
@@ -2516,6 +2456,7 @@ export async function previewStudentImport(
       motherName,
       guardianPhone,
       address,
+      enrolledOn,
       isValid: errors.length === 0,
       errors,
     });
@@ -2553,6 +2494,7 @@ export const commitImportSchema = z.object({
         motherName: z.string().nullable().optional(),
         guardianPhone: z.string().nullable().optional(),
         address: z.string().nullable().optional(),
+        enrolledOn: z.string().nullable().optional(),
         isValid: z.boolean().optional(),
         errors: z.array(z.string()).optional(),
       }),
@@ -2576,9 +2518,45 @@ export async function commitStudentImport(
     );
   }
 
+  // Persistent token replay protection via audit logs
+  const tokenHash = createHash("sha256").update(parsed.token).digest("hex");
+  const [alreadyUsed] = await db
+    .select({ id: s.auditLogs.id })
+    .from(s.auditLogs)
+    .where(
+      and(
+        eq(s.auditLogs.entity, "student_import_token"),
+        eq(s.auditLogs.entityId, tokenHash),
+      ),
+    )
+    .limit(1);
+
+  if (alreadyUsed) {
+    throw new HttpError(
+      409,
+      "Token preview import ini sudah pernah digunakan (replay detected). Silakan lakukan preview ulang.",
+      "TOKEN_ALREADY_USED",
+    );
+  }
+
   const todayStr = new Date().toISOString().split("T")[0];
 
   return await db.transaction(async (tx) => {
+    // Record token usage persistently to prevent concurrent / subsequent replay
+    await tx.insert(s.auditLogs).values({
+      userId: ctx.actor.id,
+      action: "IMPORT_COMMITTED",
+      entity: "student_import_token",
+      entityId: tokenHash,
+      after: {
+        rowCount: parsed.rows.length,
+        status: "USED",
+        usedAt: new Date().toISOString(),
+      },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+
     let createdCount = 0;
     const createdIds: string[] = [];
     const errors: Array<{ rowNum: number; message: string }> = [];
@@ -2623,7 +2601,7 @@ export async function commitStudentImport(
             birthPlace: row.birthPlace,
             birthDate: row.birthDate,
             classId: row.resolvedClassId,
-            enrolledOn: todayStr,
+            enrolledOn: row.enrolledOn || todayStr,
             active: true,
             studentStatus: "ACTIVE",
           })
@@ -2643,8 +2621,8 @@ export async function commitStudentImport(
           studentId: student.id,
           classId: row.resolvedClassId,
           registrationType: "NEW_STUDENT",
-          registrationDate: todayStr,
-          enrollmentDate: todayStr,
+          registrationDate: row.enrolledOn || todayStr,
+          enrollmentDate: row.enrolledOn || todayStr,
           enrollmentStatus: "ACTIVE",
         });
 

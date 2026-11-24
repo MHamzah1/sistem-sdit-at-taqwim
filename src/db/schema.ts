@@ -639,6 +639,7 @@ export const studentPeriodicData = pgTable(
     measurementDate: date("measurement_date").notNull(),
     heightCm: numeric("height_cm"),
     weightKg: numeric("weight_kg"),
+    headCircumferenceCm: numeric("head_circumference_cm"),
     notes: text("notes"),
     recordedBy: uuid("recorded_by").references(() => users.id),
     ...times(),
@@ -658,6 +659,7 @@ export const studentAidRecords = pgTable(
     aidSource: text("aid_source"),
     startDate: date("start_date"),
     endDate: date("end_date"),
+    amount: integer("amount"),
     status: text("status").default("ACTIVE").notNull(),
     notes: text("notes"),
     supportingDocumentId: uuid("supporting_document_id").references(

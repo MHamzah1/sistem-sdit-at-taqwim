@@ -48,6 +48,7 @@ import { cn } from "@/src/lib/utils";
 import { upload } from "@vercel/blob/client";
 import { useApp } from "@/src/lib/context/AppContext";
 import { api, uploadStudentDocument, downloadStudentDocumentContent } from "@/src/lib/api";
+import { calculateStudentCompleteness } from "@/src/lib/completeness";
 
 interface FormFieldProps {
   label: string;
@@ -141,9 +142,35 @@ export function StudentFormView({
   const [birthDate, setBirthDate] = useState(
     student?.birthDate?.slice(0, 10) || initialFullProfile?.student?.birthDate?.slice(0, 10) || "",
   );
-  const [photoUrl, setPhotoUrl] = useState(
-    student?.photoUrl || initialFullProfile?.student?.photoUrl || "",
+  const initialPhotoRaw =
+    student?.photoUrl || initialFullProfile?.student?.photoUrl || "";
+  const [photoUrl, setPhotoUrl] = useState(initialPhotoRaw);
+  const [photoStoragePath, setPhotoStoragePath] = useState(
+    initialPhotoRaw.startsWith("data:") || initialPhotoRaw.startsWith("http")
+      ? ""
+      : initialPhotoRaw,
   );
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string>(() => {
+    if (!initialPhotoRaw) return "";
+    if (
+      initialPhotoRaw.startsWith("data:") ||
+      initialPhotoRaw.startsWith("blob:") ||
+      initialPhotoRaw.startsWith("http")
+    ) {
+      return initialPhotoRaw;
+    }
+    const sId = student?.id || initialFullProfile?.student?.id;
+    return sId ? `/api/students/${sId}/photo` : "";
+  });
+  const localPreviewRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(localPreviewRef.current);
+      }
+    };
+  }, []);
   const [religion, setReligion] = useState(
     sAny?.religion || initialFullProfile?.student?.religion || "Islam",
   );
@@ -213,42 +240,52 @@ export function StudentFormView({
 
   // --- Section 03: Registrasi & Akademik ---
   const initialEnrollment = initialFullProfile?.enrollments?.[0];
+  const initialReg = initialFullProfile?.registration || initialEnrollment;
   const [registrationNumber, setRegistrationNumber] = useState(
-    initialEnrollment?.registrationNumber || "",
+    initialReg?.registrationNumber || "",
   );
   const [registrationType, setRegistrationType] = useState<"NEW_STUDENT" | "TRANSFER_STUDENT">(
-    initialEnrollment?.registrationType || "NEW_STUDENT",
+    initialReg?.registrationType || "NEW_STUDENT",
   );
   const [registrationDate, setRegistrationDate] = useState(
-    initialEnrollment?.registrationDate?.slice(0, 10) || todayStr,
+    initialReg?.registrationDate?.slice(0, 10) || todayStr,
   );
   const [acceptedDate, setAcceptedDate] = useState(
-    initialEnrollment?.acceptedDate?.slice(0, 10) || todayStr,
+    initialReg?.acceptedDate?.slice(0, 10) || todayStr,
   );
   const [enrolledOn, setEnrolledOn] = useState(
-    student?.enrolledOn?.slice(0, 10) || initialFullProfile?.student?.enrolledOn?.slice(0, 10) || todayStr,
+    student?.enrolledOn?.slice(0, 10) ||
+      initialFullProfile?.student?.enrolledOn?.slice(0, 10) ||
+      todayStr,
   );
-  const [entryGrade, setEntryGrade] = useState<number>(initialEnrollment?.entryGrade || 1);
-  const [classId, setClassId] = useState(student?.classId || classes[0]?.id || "");
+  const [entryGrade, setEntryGrade] = useState<number>(initialReg?.entryGrade || 1);
+  const [classId, setClassId] = useState(
+    student?.classId ||
+      initialFullProfile?.student?.classId ||
+      classes[0]?.id ||
+      "",
+  );
   const [academicYearId, setAcademicYearId] = useState(
     academicYears.find((y) => y.active)?.id || academicYears[0]?.id || "",
   );
   const [attendedPaud, setAttendedPaud] = useState<boolean | null>(
-    initialEnrollment?.attendedPaud ?? true,
+    initialReg?.attendedPaud ?? true,
   );
   const [attendedKindergarten, setAttendedKindergarten] = useState<boolean | null>(
-    initialEnrollment?.attendedKindergarten ?? true,
+    initialReg?.attendedKindergarten ?? true,
   );
   const [previousSchoolName, setPreviousSchoolName] = useState(
-    initialEnrollment?.previousSchoolName || "",
+    initialReg?.previousSchoolName || "",
   );
   const [previousSchoolNpsn, setPreviousSchoolNpsn] = useState(
-    initialEnrollment?.previousSchoolNpsn || "",
+    initialReg?.previousSchoolNpsn || "",
   );
   const [studentStatus, setStudentStatus] = useState<string>(
     student?.studentStatus || initialFullProfile?.student?.studentStatus || "ACTIVE",
   );
-  const [academicNotes, setAcademicNotes] = useState(initialEnrollment?.notes || "");
+  const [academicNotes, setAcademicNotes] = useState(
+    initialReg?.notes || initialEnrollment?.notes || "",
+  );
 
   // --- Section 04 & 05: Data Ayah & Ibu ---
   const familyList: any[] = Array.isArray(initialFullProfile?.family)
@@ -464,7 +501,18 @@ export function StudentFormView({
                 setIsProcessingPhoto(false);
                 return;
               }
+              // Responsive preview via local Object URL
+              const localUrl = URL.createObjectURL(blob);
+              if (localPreviewRef.current?.startsWith("blob:")) {
+                URL.revokeObjectURL(localPreviewRef.current);
+              }
+              localPreviewRef.current = localUrl;
+              setPhotoPreviewUrl(localUrl);
+
               try {
+                if (!currentUserId) {
+                  throw new Error("Sesi pengguna tidak valid. Silakan muat ulang halaman.");
+                }
                 const ext = "jpg";
                 const photoFile = new File(
                   [blob],
@@ -472,7 +520,7 @@ export function StudentFormView({
                   { type: "image/jpeg" },
                 );
                 const uploaded = await upload(
-                  `student-documents/${currentUserId || "actor"}/${crypto.randomUUID()}.${ext}`,
+                  `student-documents/${currentUserId}/${crypto.randomUUID()}.${ext}`,
                   photoFile,
                   {
                     access: "private",
@@ -480,11 +528,13 @@ export function StudentFormView({
                     contentType: "image/jpeg",
                   },
                 );
+                setPhotoStoragePath(uploaded.pathname);
                 setPhotoUrl(uploaded.pathname);
               } catch {
                 // Fallback to data URL so cropped photo is preserved if upload service is offline/dev
                 const compressed = canvas.toDataURL("image/jpeg", 0.85);
                 setPhotoUrl(compressed);
+                setPhotoStoragePath("");
               } finally {
                 setIsProcessingPhoto(false);
               }
@@ -519,7 +569,8 @@ export function StudentFormView({
   const handleAddMeasurement = () => {
     if (!newHeight || !newWeight) return;
     const newEntry = {
-      id: "temp-" + Date.now(),
+      clientKey: "m-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+      id: undefined,
       measurementDate: newMeasureDate,
       heightCm: newHeight.toString(),
       weightKg: newWeight.toString(),
@@ -536,7 +587,8 @@ export function StudentFormView({
   // Add Aid Handler
   const handleAddAid = () => {
     const newEntry = {
-      id: "temp-" + Date.now(),
+      clientKey: "a-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+      id: undefined,
       aidType: newAidType,
       aidNumber: newAidNumber,
       aidSource: newAidSource,
@@ -549,40 +601,57 @@ export function StudentFormView({
     setNewAidNotes("");
   };
 
-  // Calculate Completeness Score
+  // Calculate Completeness Score via unified engine
   const completeness = useMemo(() => {
-    let score = 0;
-    const totalSections = 10;
-    // 01 Identitas
-    if (name && nis && nik && gender && birthDate) score += 1;
-    // 02 Alamat
-    if (idAddress && idRegency && transportationType) score += 1;
-    // 03 Registrasi
-    if (classId && enrolledOn) score += 1;
-    // 04 Ayah
-    if (fatherName || fatherLifeStatus === "DECEASED") score += 1;
-    // 05 Ibu
-    if (motherName || motherLifeStatus === "DECEASED") score += 1;
-    // 06 Wali / Darurat
-    if (emergencyName && emergencyPhone) score += 1;
-    // 07 Kesehatan
-    if (bloodType !== "UNKNOWN") score += 1;
-    // 08 Bantuan
-    score += 1; // Opsional terkonfirmasi
-    // 09 Karakteristik
-    score += 1;
-    // 10 Dokumen
-    const verifiedOrUploaded = documents.length > 0;
-    if (verifiedOrUploaded) score += 1;
-
-    const pct = Math.round((score / totalSections) * 100);
-    return { score, totalSections, pct };
+    return calculateStudentCompleteness({
+      student: {
+        name,
+        nis,
+        nik,
+        gender,
+        birthDate,
+        birthPlace,
+        nisn,
+        familyCardNumber,
+      },
+      address: {
+        address: idAddress,
+        regency: idRegency,
+        transportationType,
+      },
+      registration: {
+        classId,
+        enrolledOn,
+      },
+      father: {
+        fullName: fatherName,
+        lifeStatus: fatherLifeStatus,
+      },
+      mother: {
+        fullName: motherName,
+        lifeStatus: motherLifeStatus,
+      },
+      emergencyContact: {
+        name: emergencyName,
+        phone: emergencyPhone,
+      },
+      health: {
+        bloodType,
+      },
+      characteristic:
+        initialFullProfile?.characteristic ||
+        (characteristicTemplateId ? { status: "FILLED" } : { status: "EMPTY" }),
+      documents,
+    });
   }, [
     name,
     nis,
     nik,
     gender,
     birthDate,
+    birthPlace,
+    nisn,
+    familyCardNumber,
     idAddress,
     idRegency,
     transportationType,
@@ -595,6 +664,8 @@ export function StudentFormView({
     emergencyName,
     emergencyPhone,
     bloodType,
+    characteristicTemplateId,
+    initialFullProfile,
     documents,
   ]);
 
@@ -612,7 +683,7 @@ export function StudentFormView({
         gender: gender || null,
         birthPlace: birthPlace.trim() || null,
         birthDate: birthDate || null,
-        photoUrl: photoUrl || null,
+        photoUrl: photoStoragePath || photoUrl || null,
         religion,
         citizenship,
         birthOrder: birthOrder === "" ? null : Number(birthOrder),
@@ -715,7 +786,7 @@ export function StudentFormView({
         assistanceNeeds: assistanceNeeds.trim() || null,
       },
       aid: aidRecords.map((a) => ({
-        id: a.id || undefined,
+        id: a.id && !a.id.startsWith("temp-") ? a.id : undefined,
         aidType: a.aidType,
         aidNumber: a.aidNumber || null,
         aidSource: a.aidSource || null,
@@ -726,7 +797,7 @@ export function StudentFormView({
         notes: a.notes || null,
       })),
       measurements: measurements.map((m) => ({
-        id: m.id || undefined,
+        id: m.id && !m.id.startsWith("temp-") ? m.id : undefined,
         academicYearId: m.academicYearId || undefined,
         semester: Number(m.semester) || 1,
         measurementDate: m.measurementDate,
@@ -777,16 +848,66 @@ export function StudentFormView({
   };
 
   const sectionsList = [
-    { id: 1, title: "01. Identitas Siswa", icon: Users, complete: !!(name && nis && nik) },
-    { id: 2, title: "02. Alamat & Domisili", icon: MapPin, complete: !!(idAddress && idRegency) },
-    { id: 3, title: "03. Registrasi & Akademik", icon: School, complete: !!(classId && enrolledOn) },
-    { id: 4, title: "04. Data Ayah Kandung", icon: Users, complete: !!(fatherName || fatherLifeStatus === "DECEASED") },
-    { id: 5, title: "05. Data Ibu Kandung", icon: Users, complete: !!(motherName || motherLifeStatus === "DECEASED") },
-    { id: 6, title: "06. Wali & Kontak Darurat", icon: Shield, complete: !!(emergencyName && emergencyPhone) },
-    { id: 7, title: "07. Kesehatan & Kebutuhan Khusus", icon: HeartPulse, complete: bloodType !== "UNKNOWN" },
-    { id: 8, title: "08. Bantuan Pendidikan", icon: Award, complete: true },
-    { id: 9, title: "09. Karakteristik & Perkembangan", icon: BookOpen, complete: true },
-    { id: 10, title: "10. Dokumen Persyaratan", icon: FolderOpen, complete: documents.length > 0 },
+    {
+      id: 1,
+      title: "01. Identitas Siswa",
+      icon: Users,
+      complete: completeness.sections.identitas?.status === "COMPLETE",
+    },
+    {
+      id: 2,
+      title: "02. Alamat & Domisili",
+      icon: MapPin,
+      complete: completeness.sections.alamat?.status === "COMPLETE",
+    },
+    {
+      id: 3,
+      title: "03. Registrasi & Akademik",
+      icon: School,
+      complete: completeness.sections.registrasi?.status === "COMPLETE",
+    },
+    {
+      id: 4,
+      title: "04. Data Ayah Kandung",
+      icon: Users,
+      complete: completeness.sections.ayah?.status === "COMPLETE",
+    },
+    {
+      id: 5,
+      title: "05. Data Ibu Kandung",
+      icon: Users,
+      complete: completeness.sections.ibu?.status === "COMPLETE",
+    },
+    {
+      id: 6,
+      title: "06. Wali & Kontak Darurat",
+      icon: Shield,
+      complete: completeness.sections.wali_darurat?.status === "COMPLETE",
+    },
+    {
+      id: 7,
+      title: "07. Kesehatan & Kebutuhan Khusus",
+      icon: HeartPulse,
+      complete: completeness.sections.kesehatan?.status === "COMPLETE",
+    },
+    {
+      id: 8,
+      title: "08. Bantuan Pendidikan",
+      icon: Award,
+      complete: completeness.sections.bantuan?.status === "COMPLETE",
+    },
+    {
+      id: 9,
+      title: "09. Karakteristik & Perkembangan",
+      icon: BookOpen,
+      complete: completeness.sections.karakteristik?.status === "COMPLETE",
+    },
+    {
+      id: 10,
+      title: "10. Dokumen Persyaratan",
+      icon: FolderOpen,
+      complete: completeness.sections.dokumen?.status === "COMPLETE",
+    },
   ];
 
   return (
@@ -931,9 +1052,9 @@ export function StudentFormView({
                 <Card className="border border-border/70 bg-muted/20 shadow-none">
                   <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-center sm:items-start gap-5">
                     <div className="w-[96px] h-[128px] rounded-lg bg-card border-2 border-dashed border-border flex flex-col items-center justify-center overflow-hidden shrink-0 shadow-2xs relative group">
-                      {photoUrl ? (
+                      {photoPreviewUrl ? (
                         <img
-                          src={photoUrl}
+                          src={photoPreviewUrl}
                           alt="Pas Foto 3x4"
                           className="w-full h-full object-cover"
                         />
@@ -972,14 +1093,22 @@ export function StudentFormView({
                           disabled={isProcessingPhoto}
                         >
                           <Upload className="size-3.5 mr-1.5" />
-                          {photoUrl ? "Ganti Foto" : "Pilih Foto"}
+                          {photoPreviewUrl || photoUrl ? "Ganti Foto" : "Pilih Foto"}
                         </Button>
-                        {photoUrl && (
+                        {(photoPreviewUrl || photoUrl) && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => setPhotoUrl("")}
+                            onClick={() => {
+                              if (localPreviewRef.current?.startsWith("blob:")) {
+                                URL.revokeObjectURL(localPreviewRef.current);
+                                localPreviewRef.current = null;
+                              }
+                              setPhotoUrl("");
+                              setPhotoStoragePath("");
+                              setPhotoPreviewUrl("");
+                            }}
                             className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="size-3.5 mr-1.5" />
@@ -2031,7 +2160,7 @@ export function StudentFormView({
                           </thead>
                           <tbody className="divide-y divide-border/60">
                             {measurements.map((m, i) => (
-                              <tr key={i} className="hover:bg-muted/30 transition-colors">
+                              <tr key={m.clientKey || m.id || i} className="hover:bg-muted/30 transition-colors">
                                 <td className="py-3 px-4 text-foreground font-medium">{m.measurementDate}</td>
                                 <td className="py-3 px-4 font-semibold text-primary">{m.heightCm} cm</td>
                                 <td className="py-3 px-4 font-semibold text-primary">{m.weightKg} kg</td>
@@ -2095,7 +2224,7 @@ export function StudentFormView({
                         </thead>
                         <tbody className="divide-y divide-border/60">
                           {aidRecords.map((a, i) => (
-                            <tr key={i} className="hover:bg-muted/30 transition-colors">
+                            <tr key={a.clientKey || a.id || i} className="hover:bg-muted/30 transition-colors">
                               <td className="py-3 px-4 font-semibold text-primary">{a.aidType}</td>
                               <td className="py-3 px-4 text-foreground">{a.aidNumber || "-"}</td>
                               <td className="py-3 px-4 text-muted-foreground">{a.aidSource || "-"}</td>

@@ -133,3 +133,20 @@ export function csvCell(value: unknown) {
   if (/^[\s]*[=+@-]/.test(text)) text = "'" + text;
   return '"' + text.replaceAll('"', '""') + '"';
 }
+
+export function getStudentPhotoUrl(
+  student?: { id?: string; photoUrl?: string | null } | null,
+): string | null {
+  if (!student?.photoUrl) return null;
+  const p = student.photoUrl.trim();
+  if (
+    p.startsWith("data:") ||
+    p.startsWith("blob:") ||
+    p.startsWith("http://") ||
+    p.startsWith("https://")
+  ) {
+    return p;
+  }
+  return `/api/students/${student.id}/photo`;
+}
+

@@ -35,7 +35,7 @@ import {
   PaymentModal,
   WhatsAppReminderModal,
 } from "@/src/components/modals";
-import { api } from "@/src/lib/api";
+import { api, getStudentPhotoUrl } from "@/src/lib/api";
 import type { AppState } from "@/server/state";
 import { formatDateIndo } from "@/src/lib/formatters";
 import * as XLSX from "xlsx";
@@ -771,9 +771,9 @@ export default function MasterSiswaPage() {
                       <td className="st-col-idx">{idx + 1}</td>
                       <td className="st-col-name">
                         <div className="st-user-cell">
-                          {s.photoUrl ? (
+                          {getStudentPhotoUrl(s) ? (
                             <img
-                              src={s.photoUrl}
+                              src={getStudentPhotoUrl(s)!}
                               alt={s.name}
                               className="st-user-avatar-img"
                               onError={(e) => {

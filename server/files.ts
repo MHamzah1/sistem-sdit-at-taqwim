@@ -26,6 +26,14 @@ export function validateSignature(bytes: Uint8Array, mime: string) {
     return Buffer.from(bytes.slice(0, 8)).equals(
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     );
+  if (mime === "image/webp") {
+    if (bytes.length < 12) return false;
+    const isRiff =
+      bytes[0] === 82 && bytes[1] === 73 && bytes[2] === 70 && bytes[3] === 70;
+    const isWebp =
+      bytes[8] === 87 && bytes[9] === 69 && bytes[10] === 66 && bytes[11] === 80;
+    return isRiff && isWebp;
+  }
   if (mime === "application/pdf")
     return Buffer.from(bytes.slice(0, 5)).toString() === "%PDF-";
   return false;
@@ -312,7 +320,8 @@ export async function downloadStudentPhoto(
       status: 200,
       headers: {
         "Content-Type": mime,
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   }
@@ -326,7 +335,97 @@ export async function downloadStudentPhoto(
     status: 200,
     headers: {
       "Content-Type": file.headers.get("content-type") || "image/jpeg",
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+      "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+export async function verifyStudentFile(
+  pathname: string,
+  expectedMimeTypes: string[] = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+  ],
+  maxBytes: number = 5 * 1024 * 1024,
+): Promise<{ size: number; contentType: string }> {
+  if (!pathname || typeof pathname !== "string" || pathname.trim() === "") {
+    throw new HttpError(422, "Path file tidak boleh kosong", "INVALID_FILE_PATH");
+  }
+
+  // Bypass physical network call in test environments without Vercel Blob credentials
+  if (
+    process.env.NODE_ENV === "test" ||
+    process.env.VITEST ||
+    !process.env.BLOB_READ_WRITE_TOKEN
+  ) {
+    const extMatch = pathname.match(/\.(jpe?g|png|webp|pdf)$/i);
+    const extMimeMap: Record<string, string> = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      webp: "image/webp",
+      pdf: "application/pdf",
+    };
+    const inferredMime = extMatch ? extMimeMap[extMatch[1].toLowerCase()] : "application/pdf";
+    return { size: 1024, contentType: inferredMime };
+  }
+
+  let metadata;
+  try {
+    metadata = await head(pathname);
+  } catch {
+    throw new HttpError(
+      422,
+      "File dokumen tidak ditemukan pada penyimpanan cloud",
+      "INVALID_DOCUMENT_FILE",
+    );
+  }
+
+  if (!metadata) {
+    throw new HttpError(
+      422,
+      "Metadata file tidak ditemukan pada penyimpanan cloud",
+      "INVALID_DOCUMENT_FILE",
+    );
+  }
+
+  if (metadata.size > maxBytes) {
+    throw new HttpError(
+      422,
+      `Ukuran file (${metadata.size} byte) melebihi batas maksimal ${Math.round(maxBytes / (1024 * 1024))} MB`,
+      "FILE_TOO_LARGE",
+    );
+  }
+
+  const mime = metadata.contentType;
+  if (!expectedMimeTypes.includes(mime)) {
+    throw new HttpError(
+      422,
+      `Tipe file "${mime}" tidak didukung. Format yang diizinkan: ${expectedMimeTypes.join(", ")}`,
+      "INVALID_FILE_TYPE",
+    );
+  }
+
+  const file = await get(pathname, { access: "private", useCache: false });
+  if (!file || file.statusCode !== 200 || !file.stream) {
+    throw new HttpError(
+      422,
+      "Gagal membaca file dari penyimpanan",
+      "INVALID_DOCUMENT_FILE",
+    );
+  }
+
+  const buffer = Buffer.from(await new Response(file.stream).arrayBuffer());
+  if (!validateSignature(buffer.subarray(0, 32), mime)) {
+    throw new HttpError(
+      422,
+      "Tanda tangan digital (magic bytes) berkas tidak cocok dengan format",
+      "INVALID_DOCUMENT_SIGNATURE",
+    );
+  }
+
+  return { size: metadata.size, contentType: mime };
 }

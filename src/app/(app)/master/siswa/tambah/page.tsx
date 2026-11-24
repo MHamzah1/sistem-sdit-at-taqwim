@@ -24,62 +24,124 @@ export function normalizeDraftData(data: any) {
   let family = data.family;
   if (family && !Array.isArray(family)) {
     family = [];
-    if (data.family.father?.name || data.family.father?.fullName) {
+    const father = data.family?.father;
+    const fatherData = father?.data || father;
+    const fatherFullName =
+      fatherData?.fullName || fatherData?.name || father?.fullName || father?.name;
+    const fatherId = father?.familyMemberId || father?.id;
+    if (fatherFullName || fatherId) {
       family.push({
         relationshipType: "FATHER",
         isPrimaryContact: data.family.primaryContact === "FATHER",
         isPaymentResponsible: data.family.paymentResponsible === "FATHER",
         isEmergencyContact: false,
         member: {
-          id: data.family.father.id,
-          fullName: data.family.father.name || data.family.father.fullName,
-          ...data.family.father,
+          id: fatherId || undefined,
+          fullName: fatherFullName || "",
+          nik: fatherData?.nik || father?.nik || null,
+          lifeStatus: fatherData?.lifeStatus || father?.lifeStatus || "ALIVE",
+          education: fatherData?.education || father?.education || "S1",
+          occupation: fatherData?.occupation || father?.occupation || "KARYAWAN_SWASTA",
+          institutionName: fatherData?.institutionName || father?.institutionName || "",
+          monthlyIncomeRange:
+            fatherData?.monthlyIncomeRange || father?.monthlyIncomeRange || "RP_2_JT_SD_5_JT",
+          phone: fatherData?.phone || father?.phone || "",
+          email: fatherData?.email || father?.email || "",
         },
       });
     }
-    if (data.family.mother?.name || data.family.mother?.fullName) {
+
+    const mother = data.family?.mother;
+    const motherData = mother?.data || mother;
+    const motherFullName =
+      motherData?.fullName || motherData?.name || mother?.fullName || mother?.name;
+    const motherId = mother?.familyMemberId || mother?.id;
+    if (motherFullName || motherId) {
       family.push({
         relationshipType: "MOTHER",
         isPrimaryContact: data.family.primaryContact === "MOTHER",
         isPaymentResponsible: data.family.paymentResponsible === "MOTHER",
         isEmergencyContact: false,
         member: {
-          id: data.family.mother.id,
-          fullName: data.family.mother.name || data.family.mother.fullName,
-          ...data.family.mother,
+          id: motherId || undefined,
+          fullName: motherFullName || "",
+          nik: motherData?.nik || mother?.nik || null,
+          lifeStatus: motherData?.lifeStatus || mother?.lifeStatus || "ALIVE",
+          education: motherData?.education || mother?.education || "D3",
+          occupation: motherData?.occupation || mother?.occupation || "IBU_RUMAH_TANGGA",
+          institutionName: motherData?.institutionName || mother?.institutionName || "",
+          monthlyIncomeRange:
+            motherData?.monthlyIncomeRange || mother?.monthlyIncomeRange || "TIDAK_BERPENGHASILAN",
+          phone: motherData?.phone || mother?.phone || "",
+          email: motherData?.email || mother?.email || "",
         },
       });
     }
-    if (data.family.guardian?.name || data.family.guardian?.fullName) {
+
+    const guardian = data.family?.guardian;
+    const guardianData = guardian?.data || guardian;
+    const guardianFullName =
+      guardianData?.fullName || guardianData?.name || guardian?.fullName || guardian?.name;
+    const guardianId = guardian?.familyMemberId || guardian?.id;
+    if (guardianFullName || guardianId) {
       family.push({
         relationshipType: data.family.guardianRelationship || "OTHER_GUARDIAN",
         isPrimaryContact: data.family.primaryContact === "GUARDIAN",
         isPaymentResponsible: data.family.paymentResponsible === "GUARDIAN",
         isEmergencyContact: false,
         member: {
-          id: data.family.guardian.id,
-          fullName: data.family.guardian.name || data.family.guardian.fullName,
-          ...data.family.guardian,
+          id: guardianId || undefined,
+          fullName: guardianFullName || "",
+          nik: guardianData?.nik || guardian?.nik || null,
+          lifeStatus: guardianData?.lifeStatus || guardian?.lifeStatus || "ALIVE",
+          education: guardianData?.education || guardian?.education || "",
+          occupation: guardianData?.occupation || guardian?.occupation || "",
+          institutionName: guardianData?.institutionName || guardian?.institutionName || "",
+          monthlyIncomeRange: guardianData?.monthlyIncomeRange || guardian?.monthlyIncomeRange || "",
+          phone: guardianData?.phone || guardian?.phone || "",
+          email: guardianData?.email || guardian?.email || "",
         },
       });
     }
-    if (data.family.emergencyContact?.name) {
+
+    const em = data.family?.emergencyContact;
+    if (em?.name || em?.fullName) {
       family.push({
-        relationshipType:
-          data.family.emergencyContact.relationship || "OTHER_GUARDIAN",
+        relationshipType: em.relationship || "OTHER_GUARDIAN",
         isPrimaryContact: false,
         isPaymentResponsible: false,
         isEmergencyContact: true,
         member: {
-          fullName: data.family.emergencyContact.name,
-          phone: data.family.emergencyContact.phone,
+          fullName: em.name || em.fullName,
+          phone: em.phone || "",
         },
       });
     }
   }
 
+  const student = data.student ? { ...data.student } : { ...data };
+  if (data.classId && !student.classId) student.classId = data.classId;
+  if (data.enrolledOn && !student.enrolledOn) student.enrolledOn = data.enrolledOn;
+
+  const reg = data.registration;
+  const enrollments = data.enrollments || (reg ? [{
+    registrationNumber: reg.registrationNumber || null,
+    registrationType: reg.registrationType || "NEW_STUDENT",
+    registrationDate: reg.registrationDate || null,
+    acceptedDate: reg.acceptedDate || null,
+    entryGrade: reg.entryGrade || 1,
+    attendedPaud: reg.attendedPaud ?? true,
+    attendedKindergarten: reg.attendedKindergarten ?? true,
+    previousSchoolName: reg.previousSchoolName || null,
+    previousSchoolNpsn: reg.previousSchoolNpsn || null,
+    notes: reg.notes || null,
+  }] : []);
+
   return {
     ...data,
+    student,
+    registration: reg || null,
+    enrollments,
     addresses: addresses || [],
     family: family || [],
     health: data.health || null,
