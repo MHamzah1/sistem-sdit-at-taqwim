@@ -63,6 +63,8 @@ import {
   requestProfileChange,
   getProfileChangeRequests,
   reviewProfileChange,
+  previewStudentImport,
+  commitStudentImport,
 } from "./studentMaster";
 const json = (value: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(value, {
@@ -243,10 +245,18 @@ export async function handle(
         .parse(await payload(request));
       return json(await reviewStudentDocument(db, ctx, dId, body.status, body.rejectionReason));
     }
-    docMatch = /^student-documents\/([^/]+)\/content$/.exec(path);
+    docMatch = /^student-documents\/([^/]+)\/(?:content|download)$/.exec(path);
     if (docMatch && method === "GET") {
       const dId = uuid.parse(docMatch[1]);
       return await downloadStudentDocument(db, ctx, dId, request);
+    }
+    if (path === "students/import/preview" && method === "POST") {
+      const rows = z.array(z.record(z.string(), z.string())).parse(await payload(request));
+      return json(await previewStudentImport(db, actor, rows));
+    }
+    if (path === "students/import/commit" && method === "POST") {
+      const validRows = (await payload(request)) as any;
+      return json(await commitStudentImport(db, ctx, validRows));
     }
     if (path === "family-members/search" && method === "GET") {
       return json(await searchFamilyMembers(db, actor, url.searchParams.get("q") || ""));
@@ -277,8 +287,43 @@ export async function handle(
       const sId = uuid.parse(studentMatch[1]);
       return json(await requestProfileChange(db, ctx, sId, await payload(request)), 201);
     }
+    if (studentMatch && method === "GET") {
+      const sId = uuid.parse(studentMatch[1]);
+      const rawRequests = await getProfileChangeRequests(db, actor, sId);
+      const requests = rawRequests.map((r) => ({
+        id: r.request.id,
+        studentId: r.request.studentId,
+        status: r.request.status,
+        revision: r.request.revision,
+        requestedBy: r.request.requestedBy,
+        patch: r.request.patch,
+        reviewerId: r.request.reviewerId,
+        rejectionReason: r.request.rejectionReason,
+        createdAt: r.request.createdAt,
+        updatedAt: r.request.updatedAt,
+        student: r.student,
+        user: r.user,
+        request: r.request,
+      }));
+      return json({ requests });
+    }
     if ((path === "student-change-requests" || path === "student-profile-change-requests") && method === "GET") {
-      const requests = await getProfileChangeRequests(db, actor);
+      const rawRequests = await getProfileChangeRequests(db, actor);
+      const requests = rawRequests.map((r) => ({
+        id: r.request.id,
+        studentId: r.request.studentId,
+        status: r.request.status,
+        revision: r.request.revision,
+        requestedBy: r.request.requestedBy,
+        patch: r.request.patch,
+        reviewerId: r.request.reviewerId,
+        rejectionReason: r.request.rejectionReason,
+        createdAt: r.request.createdAt,
+        updatedAt: r.request.updatedAt,
+        student: r.student,
+        user: r.user,
+        request: r.request,
+      }));
       return json({ requests });
     }
     let changeMatch = /^(?:student-change-requests|student-profile-change-requests)\/([^/]+)\/review$/.exec(path);

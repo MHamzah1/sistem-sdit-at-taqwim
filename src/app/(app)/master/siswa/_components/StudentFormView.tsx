@@ -45,7 +45,7 @@ import { Select } from "@/src/components/ui/select";
 import { Textarea } from "@/src/components/ui/textarea";
 import { Badge as UiBadge } from "@/src/components/ui/badge";
 import { cn } from "@/src/lib/utils";
-import { api } from "@/src/lib/api";
+import { api, uploadStudentDocument, downloadStudentDocumentContent } from "@/src/lib/api";
 
 interface FormFieldProps {
   label: string;
@@ -587,6 +587,22 @@ export function StudentFormView({
         aidSource: a.aidSource || null,
         status: a.status || "ACTIVE",
         notes: a.notes || null,
+      })),
+      measurements: measurements.map((m) => ({
+        academicYearId: m.academicYearId || undefined,
+        semester: Number(m.semester) || 1,
+        measurementDate: m.measurementDate,
+        heightCm: Number(m.heightCm),
+        weightKg: Number(m.weightKg),
+        notes: m.notes || null,
+      })),
+      documents: documents.map((d) => ({
+        documentType: d.documentType,
+        documentName: d.documentName || d.originalFilename,
+        originalFilename: d.originalFilename || d.documentName,
+        storagePath: d.storagePath,
+        mimeType: d.mimeType || "application/pdf",
+        fileSize: d.fileSize || 1024,
       })),
     };
   };
@@ -2044,7 +2060,15 @@ export function StudentFormView({
                                   type="button"
                                   variant="outline"
                                   size="xs"
-                                  onClick={() => window.open(doc.storagePath, "_blank")}
+                                  onClick={() => {
+                                    if (doc.id && !doc.id.startsWith("temp-")) {
+                                      downloadStudentDocumentContent(doc);
+                                    } else if (doc.storagePath?.startsWith("http")) {
+                                      window.open(doc.storagePath, "_blank");
+                                    } else {
+                                      alert("Dokumen dapat diunduh setelah data siswa disimpan.");
+                                    }
+                                  }}
                                 >
                                   <Eye className="size-3 mr-1" />
                                   Lihat
@@ -2405,21 +2429,38 @@ export function StudentFormView({
                 type="button"
                 variant="default"
                 disabled={!uploadDocFile}
-                onClick={() => {
-                  if (uploadDocFile) {
-                    const newDoc = {
-                      id: "temp-" + Date.now(),
-                      documentType: uploadDocType,
-                      documentName: uploadDocName,
-                      originalFilename: uploadDocFile.name,
-                      mimeType: uploadDocFile.type,
-                      fileSize: uploadDocFile.size,
-                      verificationStatus: "PENDING",
-                      storagePath: URL.createObjectURL(uploadDocFile),
-                    };
-                    setDocuments((prev) => [...prev, newDoc]);
+                onClick={async () => {
+                  if (!uploadDocFile) return;
+                  if (uploadDocFile.size > 5 * 1024 * 1024) {
+                    alert("Ukuran dokumen melebihi batas maksimal 5 MB");
+                    return;
+                  }
+                  try {
+                    if (student?.id) {
+                      const createdDoc = await uploadStudentDocument(
+                        uploadDocFile,
+                        student.id,
+                        student.id,
+                        uploadDocType,
+                        uploadDocName,
+                      );
+                      setDocuments((prev) => [...prev, createdDoc]);
+                    } else {
+                      const newDoc = {
+                        documentType: uploadDocType,
+                        documentName: uploadDocName,
+                        originalFilename: uploadDocFile.name,
+                        mimeType: uploadDocFile.type,
+                        fileSize: uploadDocFile.size,
+                        verificationStatus: "PENDING",
+                        storagePath: `staging/${uploadDocFile.name}`,
+                      };
+                      setDocuments((prev) => [...prev, newDoc]);
+                    }
                     setShowUploadDocModal(false);
                     setUploadDocFile(null);
+                  } catch (err: any) {
+                    alert(err.message || "Gagal mengunggah dokumen");
                   }
                 }}
               >

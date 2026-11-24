@@ -75,6 +75,53 @@ export function isGuardian(actor: Actor) {
     actor.permissions.includes("guardian")
   );
 }
+const SENSITIVE_AUDIT_KEYS = new Set([
+  "password",
+  "passwordhash",
+  "token",
+  "tokenhash",
+  "authsecret",
+  "secret",
+  "nik",
+  "familycardnumber",
+  "birthcertificatenumber",
+  "phone",
+  "email",
+  "monthlyincomerange",
+  "medicalhistory",
+  "foodallergies",
+  "drugallergies",
+  "routinemedication",
+  "emergencyhandlingnotes",
+  "assistanceneeds",
+  "specialneedstypes",
+]);
+
+export function sanitizeForAudit(data: unknown): unknown {
+  if (data === null || data === undefined) return data;
+  if (typeof data !== "object") return data;
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForAudit(item));
+  }
+  const obj = data as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase();
+    if (SENSITIVE_AUDIT_KEYS.has(lowerKey)) {
+      result[key] = "[REDACTED]";
+    } else if (typeof val === "object" && val !== null) {
+      result[key] = sanitizeForAudit(val);
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+export function canAccessSensitiveStudentData(actor: Actor): boolean {
+  return actor.permissions.includes("master");
+}
+
 export async function audit(
   db: Database | Transaction,
   ctx: Context,
@@ -91,8 +138,8 @@ export async function audit(
       action,
       entity,
       entityId,
-      before,
-      after,
+      before: sanitizeForAudit(before),
+      after: sanitizeForAudit(after),
       ip: ctx.ip,
       userAgent: ctx.userAgent?.slice(0, 500),
     });

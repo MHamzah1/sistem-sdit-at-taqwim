@@ -18,20 +18,27 @@ export default function UbahSiswaPage({
   const { state, loading, busy, refresh, setToast, setError } = useApp();
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  const fetchProfile = () => {
+    setLoadingProfile(true);
+    setProfileError(null);
     api<any>(`students/${id}/profile`)
       .then((res) => {
-        if (active) setFullProfile(res);
+        setFullProfile(res);
       })
-      .catch(() => {})
+      .catch((err) => {
+        setProfileError(
+          err.message || "Gagal memuat profil lengkap siswa dari server.",
+        );
+      })
       .finally(() => {
-        if (active) setLoadingProfile(false);
+        setLoadingProfile(false);
       });
-    return () => {
-      active = false;
-    };
+  };
+
+  useEffect(() => {
+    fetchProfile();
   }, [id]);
 
   if (loading || !state || loadingProfile) {
@@ -40,6 +47,30 @@ export default function UbahSiswaPage({
         <div className="st-table-loading">
           <div className="st-spinner" />
           <p>Memuat profil lengkap siswa...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <div className="st-page-shell">
+        <div className="st-empty-state">
+          <AlertTriangle size={48} className="st-empty-icon" />
+          <h3>Gagal Memuat Profil Siswa</h3>
+          <p>{profileError}</p>
+          <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+            <button
+              type="button"
+              className="st-btn-primary"
+              onClick={fetchProfile}
+            >
+              Coba Lagi
+            </button>
+            <Link href={`/master/siswa/${id}`} className="st-btn-outline">
+              Kembali ke Detail
+            </Link>
+          </div>
         </div>
       </div>
     );

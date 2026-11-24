@@ -1,18 +1,22 @@
-# Active Task: TGS-010 s/d TGS-021 — Fitur Kelengkapan Master Siswa Terpadu
+# Active Task: TGS-010 s/d TGS-021 (Finishing FIN-001 s/d FIN-012) — Master Siswa SDIT AT-TAQWIM
 
-- **Fitur:** Kelengkapan Master Siswa SDIT AT-TAQWIM
-- **Status:** SELESAI (100% Complete)
-- **Cakupan:**
-  - TGS-010: Skema Database Master Siswa (Additive, 10 Kolom Tambahan + 10 Tabel Baru)
-  - TGS-011: Backend Identitas & Registrasi
-  - TGS-012: Backend Orang Tua & Wali
-  - TGS-013: Backend Kesehatan & Bantuan
-  - TGS-014: Backend Dokumen Siswa & Storage
-  - TGS-015: Backend Kelengkapan Biodata & Draft
-  - TGS-016: Frontend Form Siswa (10 Seksi Wizard, Draft Auto-Save)
-  - TGS-017: Frontend Detail Siswa (10 Tab Profil 360°, Progress Bar Kelengkapan, Modal Cetak A4 & Buku Induk)
-  - TGS-018: Frontend Daftar Master Siswa (5 Metrik Ringkasan, Filter Multi-Dimensi, Modal Draf)
-  - TGS-019: Wizard Import Excel 5-Tahap, Export CSV Berproteksi Formula Injection, Pratinjau Cetak Resmi A4
-  - TGS-020: Pengajuan Pembaruan Biodata Wali Murid & Antrean Verifikasi TU
-  - TGS-021: Pengujian Unit Test Otomatis (8/8 Lulus), Verifikasi Statis TypeScript (0 Error), Laporan Implementasi Resmi
-- **Laporan Resmi:** `docs/fitur/kelengkapan-master-siswa/LAPORAN_IMPLEMENTASI_MASTER_SISWA.md`
+- **Fitur:** Kelengkapan Master Siswa SDIT AT-TAQWIM (Finishing V2 & UI Freeze)
+- **Status:** SELESAI PADA SOURCE (Verifikasi Statis & Unit Test Lulus; Runtime DB Pending Gerbang DAT-001)
+- **Baseline Audit:** Commit `e3b88d4` (14:53 WIB)
+- **Cakupan Pemulihan & Perbaikan (FIN-001 s/d FIN-012):**
+  - FIN-001 / TGS-011: Keamanan, RBAC Whitelist Projection, Masking NIK/KK/HP, Sanitizer Audit Log Rekursif.
+  - FIN-002 / TGS-010: Pemulihan 10 Kolom Skema `students`, Unique Constraints NIK/NISN, Unique Address Type, FK Dokumen Bantuan.
+  - FIN-003 / TGS-012: Transaksi Atomik Create & Update 10 Section, Pemisahan Kontak Darurat, Guard Tagihan SPP 409.
+  - FIN-004 / TGS-013: Upload Berkas Private Blob Asli (Vercel Blob), Validasi 5 MB Server-Side, Streaming Byte Penuh > 2 MB.
+  - FIN-005 / TGS-014: Import XLSX Nyata (`/api/students/import/preview` & `commit`), Eliminasi Simulasi `setTimeout`.
+  - FIN-006 / TGS-015: Penyelarasan Kontrak API, Payload Review Usulan `{ approved, rejectionReason }`, Error 503 `SCHEMA_NOT_READY`.
+  - FIN-007 / TGS-016: Resume Draft via Query Param `?draftId=...`, Update via PATCH, Guard Tolak Finalisasi Draft Ganda.
+  - FIN-008 / TGS-017: Authoritative 10-Section Completeness Scoring, Penyesuaian Skor Realistis Siswa Legacy (~20%).
+  - FIN-009 / TGS-018: Integrasi Status Karakteristik Santri, Penandaan Section 09 INCOMPLETE jika Status EMPTY.
+  - FIN-010 / TGS-019: Entry Point Portal Wali Murid di Dashboard untuk Usulan Pembaruan Biodata & Antrean Review TU.
+  - FIN-011 / TGS-020: Integrasi Frontend Penuh dengan Kepatuhan Mutlak **MANDATORY UI FREEZE** (0 Perombakan Visual).
+  - FIN-012 / TGS-021: Test Suite Unit Test (14/14 Lulus), Typecheck (0 Error), Pemetaan Lengkap TC-01 s/d TC-80.
+- **Bukti Verifikasi Aktual:**
+  - `npm run typecheck` (tsc --noEmit): **LULUS (Exit code 0, 0 error)**
+  - `npx tsx --test tests/student-master.test.ts`: **LULUS (14/14 tests passed, 0 failed)**
+- **Laporan Finishing Resmi:** `docs/fitur/kelengkapan-master-siswa/LAPORAN_FINISHING_MASTER_SISWA.md`

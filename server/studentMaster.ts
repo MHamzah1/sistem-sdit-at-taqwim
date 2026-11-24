@@ -5,6 +5,7 @@ import * as s from "../src/db/schema";
 import {
   allow,
   audit,
+  canAccessSensitiveStudentData,
   HttpError,
   isGuardian,
   ownStudent,
@@ -300,6 +301,15 @@ export const aidItemSchema = z.object({
   notes: z.string().trim().max(500).nullable().optional(),
 });
 
+export const periodicMeasurementSchema = z.object({
+  academicYearId: uuid.nullable().optional(),
+  semester: z.number().int().min(1).max(2).default(1),
+  measurementDate: date,
+  heightCm: z.coerce.number().positive("Tinggi badan harus angka positif").max(250),
+  weightKg: z.coerce.number().positive("Berat badan harus angka positif").max(200),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
 export const fullStudentProfileSchema = z.object({
   student: studentIdentitySchema,
   addresses: addressesSchema.optional(),
@@ -307,6 +317,8 @@ export const fullStudentProfileSchema = z.object({
   family: familySchema.optional(),
   health: healthSchema.optional(),
   aid: z.array(aidItemSchema).optional(),
+  measurements: z.array(periodicMeasurementSchema).optional(),
+  documents: z.array(z.any()).optional(),
   draftId: uuid.nullable().optional(),
 });
 
@@ -316,6 +328,7 @@ export function calculateStudentCompleteness(data: {
     name?: string | null;
     nis?: string | null;
     nik?: string | null;
+    familyCardNumber?: string | null;
     gender?: string | null;
     birthPlace?: string | null;
     birthDate?: string | null;
@@ -337,6 +350,8 @@ export function calculateStudentCompleteness(data: {
   mother?: { fullName?: string | null; lifeStatus?: string | null } | null;
   emergencyContact?: { name?: string | null; phone?: string | null } | null;
   health?: { bloodType?: string | null } | null;
+  characteristic?: { status?: string } | null;
+  aidRecords?: Array<{ aidType: string; status: string }> | null;
   documents?: Array<{ documentType: string; verificationStatus: string }>;
 }) {
   const sections: Record<
@@ -410,8 +425,8 @@ export function calculateStudentCompleteness(data: {
 
   // 7. Kesehatan
   sections["kesehatan"] = {
-    status: data.health?.bloodType ? "COMPLETE" : "INCOMPLETE",
-    missing: data.health?.bloodType ? [] : ["Golongan Darah"],
+    status: data.health?.bloodType && data.health.bloodType !== "UNKNOWN" ? "COMPLETE" : "INCOMPLETE",
+    missing: data.health?.bloodType && data.health.bloodType !== "UNKNOWN" ? [] : ["Golongan Darah"],
   };
 
   // 8. Bantuan Pendidikan (Opsional, status selalu terpenuhi jika ada / tidak ada)
@@ -421,10 +436,18 @@ export function calculateStudentCompleteness(data: {
   };
 
   // 9. Karakteristik
-  sections["karakteristik"] = {
-    status: "COMPLETE",
-    missing: [],
-  };
+  const charStatus = data.characteristic?.status || (data as any).characteristicStatus;
+  if (charStatus === "EMPTY") {
+    sections["karakteristik"] = {
+      status: "INCOMPLETE",
+      missing: ["Kuesioner karakteristik santri belum diisi"],
+    };
+  } else {
+    sections["karakteristik"] = {
+      status: "COMPLETE",
+      missing: [],
+    };
+  }
 
   // 10. Dokumen (KK, Akta Kelahiran, Pas Foto)
   const coreDocs = ["KK", "AKTA_KELAHIRAN", "PAS_FOTO"];
@@ -444,12 +467,24 @@ export function calculateStudentCompleteness(data: {
   ).length;
   const percentage = Math.round((completed / total) * 100);
 
+  const missingFields: string[] = [];
+  for (const s of Object.values(sections)) {
+    missingFields.push(...s.missing);
+  }
+
   return {
     percentage,
     completed,
     total,
+    applicableCount: total,
+    completedCount: completed,
     sections,
     isComplete: completed === total,
+    missingFields,
+    documentSummary: {
+      totalDocsCount: (data.documents || []).length,
+      verifiedDocsCount: verifiedDocs.length,
+    },
     verifiedDocsCount: verifiedDocs.length,
     totalDocsCount: (data.documents || []).length,
   };
@@ -488,45 +523,55 @@ export async function createStudentAtomic(
   }
 
   // Check NIK uniqueness if provided
-  if (input.student.nik && (s.students as any).nik) {
+  if (input.student.nik) {
     const existingNik = await db
       .select({ id: s.students.id })
       .from(s.students)
-      .where(eq((s.students as any).nik, input.student.nik))
+      .where(eq(s.students.nik, input.student.nik))
       .limit(1);
     if (existingNik.length > 0) {
-      throw new HttpError(409, `NIK ${input.student.nik} sudah digunakan siswa lain`);
+      throw new HttpError(409, `NIK ${maskNik(input.student.nik)} sudah digunakan siswa lain`);
+    }
+  }
+
+  // Check NISN uniqueness if provided
+  if (input.student.nisn) {
+    const existingNisn = await db
+      .select({ id: s.students.id })
+      .from(s.students)
+      .where(eq(s.students.nisn, input.student.nisn))
+      .limit(1);
+    if (existingNisn.length > 0) {
+      throw new HttpError(409, `NISN ${input.student.nisn} sudah terdaftar di sistem`);
     }
   }
 
   return await db.transaction(async (tx) => {
-    // 1. Insert Student
-    const studentValues: any = {
-      name: input.student.name,
-      nis: input.student.nis,
-      nisn: input.student.nisn,
-      gender: input.student.gender,
-      birthPlace: input.student.birthPlace,
-      birthDate: input.student.birthDate,
-      photoUrl: input.student.photoUrl,
-      classId: input.student.classId,
-      enrolledOn: input.student.enrolledOn,
-      active: input.student.active ?? true,
-    };
-    if ((s.students as any).nickname) studentValues.nickname = input.student.nickname;
-    if ((s.students as any).nik) studentValues.nik = input.student.nik;
-    if ((s.students as any).familyCardNumber) studentValues.familyCardNumber = input.student.familyCardNumber;
-    if ((s.students as any).birthCertificateNumber) studentValues.birthCertificateNumber = input.student.birthCertificateNumber;
-    if ((s.students as any).religion) studentValues.religion = input.student.religion;
-    if ((s.students as any).citizenship) studentValues.citizenship = input.student.citizenship || "WNI";
-    if ((s.students as any).birthOrder) studentValues.birthOrder = input.student.birthOrder;
-    if ((s.students as any).siblingCount) studentValues.siblingCount = input.student.siblingCount;
-    if ((s.students as any).dailyLanguage) studentValues.dailyLanguage = input.student.dailyLanguage;
-    if ((s.students as any).studentStatus) studentValues.studentStatus = input.student.studentStatus || "ACTIVE";
-
+    // 1. Insert Student with all 10 restored typed schema columns
     const [createdStudent] = await tx
       .insert(s.students)
-      .values(studentValues)
+      .values({
+        name: input.student.name,
+        nickname: input.student.nickname || null,
+        nis: input.student.nis,
+        nisn: input.student.nisn || null,
+        nik: input.student.nik || null,
+        familyCardNumber: input.student.familyCardNumber || null,
+        birthCertificateNumber: input.student.birthCertificateNumber || null,
+        gender: input.student.gender || null,
+        birthPlace: input.student.birthPlace || null,
+        birthDate: input.student.birthDate || null,
+        photoUrl: input.student.photoUrl || null,
+        religion: input.student.religion || null,
+        citizenship: input.student.citizenship || "WNI",
+        birthOrder: input.student.birthOrder ?? null,
+        siblingCount: input.student.siblingCount ?? null,
+        dailyLanguage: input.student.dailyLanguage || null,
+        classId: input.student.classId,
+        enrolledOn: input.student.enrolledOn,
+        studentStatus: input.student.studentStatus || "ACTIVE",
+        active: input.student.active ?? true,
+      })
       .returning();
 
     const studentId = createdStudent.id;
@@ -560,7 +605,10 @@ export async function createStudentAtomic(
 
     // 3. Handle Family Members
     if (input.family) {
-      // Helper to handle one family member
+      let emergencyContactLinked = false;
+      const emName = input.family.emergencyContact?.name?.trim().toLowerCase();
+      const emPhone = input.family.emergencyContact?.phone?.trim();
+
       const handleMember = async (
         entry: z.infer<typeof familyMemberSelectionSchema> | undefined,
         relationshipType: (typeof RELATIONSHIP_TYPES)[number],
@@ -569,6 +617,9 @@ export async function createStudentAtomic(
       ) => {
         if (!entry || entry.mode === "none") return;
         let memberId = entry.familyMemberId;
+        let memberName = "";
+        let memberPhone = "";
+
         if (entry.mode === "new" && entry.data) {
           const [newMember] = await tx
             .insert(s.familyMembers)
@@ -589,16 +640,35 @@ export async function createStudentAtomic(
             })
             .returning();
           memberId = newMember.id;
+          memberName = newMember.fullName;
+          memberPhone = newMember.phone || "";
+        } else if (memberId) {
+          const [existingMem] = await tx
+            .select()
+            .from(s.familyMembers)
+            .where(eq(s.familyMembers.id, memberId));
+          if (existingMem) {
+            memberName = existingMem.fullName;
+            memberPhone = existingMem.phone || "";
+          }
         }
 
         if (memberId) {
+          const isThisEmergency =
+            !emergencyContactLinked &&
+            emName &&
+            (memberName.trim().toLowerCase() === emName ||
+              (emPhone && memberPhone && memberPhone === emPhone));
+
+          if (isThisEmergency) emergencyContactLinked = true;
+
           await tx.insert(s.studentFamilyMembers).values({
             studentId,
             familyMemberId: memberId,
             relationshipType,
             isPrimaryContact: isPrimary,
             isPaymentResponsible: isPayment,
-            isEmergencyContact: false,
+            isEmergencyContact: Boolean(isThisEmergency),
           });
         }
       };
@@ -620,6 +690,27 @@ export async function createStudentAtomic(
           isGuardianPrimary,
           isGuardianPayment,
         );
+      }
+
+      // If emergency contact wasn't father/mother/guardian, create standalone emergency contact record
+      if (!emergencyContactLinked && input.family.emergencyContact?.name && input.family.emergencyContact?.phone) {
+        const [emMember] = await tx
+          .insert(s.familyMembers)
+          .values({
+            fullName: input.family.emergencyContact.name,
+            phone: input.family.emergencyContact.phone,
+            lifeStatus: "ALIVE",
+          })
+          .returning();
+
+        await tx.insert(s.studentFamilyMembers).values({
+          studentId,
+          familyMemberId: emMember.id,
+          relationshipType: (input.family.emergencyContact.relationship as any) || "OTHER_GUARDIAN",
+          isPrimaryContact: false,
+          isPaymentResponsible: false,
+          isEmergencyContact: true,
+        });
       }
     }
 
@@ -678,8 +769,51 @@ export async function createStudentAtomic(
       }
     }
 
-    // 7. Finalize Draft if present
+    // 7. Insert Physical Measurements (Pengukuran Fisik)
+    if (input.measurements && input.measurements.length > 0) {
+      for (const m of input.measurements) {
+        await tx.insert(s.studentPeriodicData).values({
+          studentId,
+          academicYearId: m.academicYearId || undefined,
+          semester: m.semester || 1,
+          measurementDate: m.measurementDate,
+          heightCm: m.heightCm.toString(),
+          weightKg: m.weightKg.toString(),
+          notes: m.notes,
+          recordedBy: ctx.actor.id,
+        });
+      }
+    }
+
+    // 8. Insert Documents (if pre-staged)
+    if (input.documents && input.documents.length > 0) {
+      for (const d of input.documents) {
+        if (d.storagePath && !d.storagePath.startsWith("blob:")) {
+          await tx.insert(s.studentDocuments).values({
+            studentId,
+            documentType: d.documentType,
+            documentName: d.documentName,
+            storagePath: d.storagePath,
+            originalFilename: d.originalFilename || d.documentName,
+            mimeType: d.mimeType || "application/pdf",
+            fileSize: d.fileSize || 1024,
+            verificationStatus: "PENDING",
+            uploadedBy: ctx.actor.id,
+          });
+        }
+      }
+    }
+
+    // 9. Finalize Draft with ownership & status guard
     if (input.draftId) {
+      const [draft] = await tx
+        .select()
+        .from(s.studentDrafts)
+        .where(eq(s.studentDrafts.id, input.draftId));
+      if (!draft) throw new HttpError(404, "Draft tidak ditemukan");
+      if (draft.userId !== ctx.actor.id) throw new HttpError(403, "Akses draft ditolak");
+      if (draft.status === "FINALIZED") throw new HttpError(409, "Draft sudah difinalisasi sebelumnya");
+
       await tx
         .update(s.studentDrafts)
         .set({
@@ -706,128 +840,97 @@ export async function createStudentAtomic(
 }
 
 export async function getStudentFullProfile(
-  db: Database,
+  db: Database | Transaction,
   actor: Actor,
   studentId: string,
 ) {
   // Check permission / guardian scoping
   await ownStudent(db, actor, studentId);
 
-  const safeQuery = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
-    try {
-      return await fn();
-    } catch (err: any) {
-      if (err?.code === "42P01" || err?.code === "42703") return fallback;
-      throw err;
-    }
-  };
-
   let student: any;
   try {
-    const [row] = await db
-      .select({
-        id: s.students.id,
-        nis: s.students.nis,
-        nisn: s.students.nisn,
-        name: s.students.name,
-        gender: s.students.gender,
-        birthPlace: s.students.birthPlace,
-        birthDate: s.students.birthDate,
-        photoUrl: s.students.photoUrl,
-        classId: s.students.classId,
-        enrolledOn: s.students.enrolledOn,
-        active: s.students.active,
-        createdAt: s.students.createdAt,
-        updatedAt: s.students.updatedAt,
-      })
-      .from(s.students)
-      .where(eq(s.students.id, studentId));
-    student = row;
-  } catch (err) {
     const [row] = await db
       .select()
       .from(s.students)
       .where(eq(s.students.id, studentId));
     student = row;
+  } catch (err: any) {
+    if (err?.code === "42P01" || err?.code === "42703") {
+      throw new HttpError(
+        503,
+        "SCHEMA_NOT_READY: Skema tabel/kolom database Master Siswa belum siap",
+      );
+    }
+    throw err;
   }
 
   if (!student) throw new HttpError(404, "Siswa tidak ditemukan");
 
-  const addresses = await safeQuery(
-    () =>
-      db
-        .select()
-        .from(s.studentAddresses)
-        .where(eq(s.studentAddresses.studentId, studentId)),
-    [],
-  );
+  const addresses = await db
+    .select()
+    .from(s.studentAddresses)
+    .where(eq(s.studentAddresses.studentId, studentId));
 
-  const enrollments = await safeQuery(
-    () =>
-      db
-        .select()
-        .from(s.studentEnrollments)
-        .where(eq(s.studentEnrollments.studentId, studentId))
-        .orderBy(desc(s.studentEnrollments.createdAt)),
-    [],
-  );
+  const enrollments = await db
+    .select()
+    .from(s.studentEnrollments)
+    .where(eq(s.studentEnrollments.studentId, studentId))
+    .orderBy(desc(s.studentEnrollments.createdAt));
 
-  const familyRelations = await safeQuery(
-    () =>
-      db
-        .select({
-          relation: s.studentFamilyMembers,
-          member: s.familyMembers,
-        })
-        .from(s.studentFamilyMembers)
-        .innerJoin(
-          s.familyMembers,
-          eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
-        )
-        .where(eq(s.studentFamilyMembers.studentId, studentId)),
-    [],
-  );
+  const familyRelations = await db
+    .select({
+      relation: s.studentFamilyMembers,
+      member: s.familyMembers,
+    })
+    .from(s.studentFamilyMembers)
+    .innerJoin(
+      s.familyMembers,
+      eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
+    )
+    .where(eq(s.studentFamilyMembers.studentId, studentId));
 
-  const health = await safeQuery(
-    async () =>
-      (
-        await db
-          .select()
-          .from(s.studentHealthProfiles)
-          .where(eq(s.studentHealthProfiles.studentId, studentId))
-      )[0] || null,
-    null,
-  );
+  const [health] = await db
+    .select()
+    .from(s.studentHealthProfiles)
+    .where(eq(s.studentHealthProfiles.studentId, studentId));
 
-  const measurements = await safeQuery(
-    () =>
-      db
-        .select()
-        .from(s.studentPeriodicData)
-        .where(eq(s.studentPeriodicData.studentId, studentId))
-        .orderBy(desc(s.studentPeriodicData.measurementDate)),
-    [],
-  );
+  const measurements = await db
+    .select()
+    .from(s.studentPeriodicData)
+    .where(eq(s.studentPeriodicData.studentId, studentId))
+    .orderBy(desc(s.studentPeriodicData.measurementDate));
 
-  const aidRecords = await safeQuery(
-    () =>
-      db
-        .select()
-        .from(s.studentAidRecords)
-        .where(eq(s.studentAidRecords.studentId, studentId))
-        .orderBy(desc(s.studentAidRecords.createdAt)),
-    [],
-  );
+  const aidRecords = await db
+    .select()
+    .from(s.studentAidRecords)
+    .where(eq(s.studentAidRecords.studentId, studentId))
+    .orderBy(desc(s.studentAidRecords.createdAt));
 
-  const documents = await safeQuery(
-    () =>
-      db
-        .select()
-        .from(s.studentDocuments)
-        .where(eq(s.studentDocuments.studentId, studentId))
-        .orderBy(desc(s.studentDocuments.createdAt)),
-    [],
-  );
+  const documents = await db
+    .select()
+    .from(s.studentDocuments)
+    .where(eq(s.studentDocuments.studentId, studentId))
+    .orderBy(desc(s.studentDocuments.createdAt));
+
+  // Submissions for Karakteristik Anak
+  const submissions = await db
+    .select()
+    .from(s.characteristicSubmissions)
+    .where(eq(s.characteristicSubmissions.studentId, studentId))
+    .orderBy(desc(s.characteristicSubmissions.createdAt));
+
+  const characteristicSummary = submissions.length > 0
+    ? {
+        status: "FILLED" as const,
+        submissionId: submissions[0].id,
+        templateId: submissions[0].templateId,
+        submittedAt: submissions[0].createdAt,
+      }
+    : {
+        status: "EMPTY" as const,
+        submissionId: null,
+        templateId: null,
+      };
 
   // Linked guardians (portal)
   const portalGuardians = await db
@@ -846,7 +949,9 @@ export async function getStudentFullProfile(
   const identityAddr = addresses.find((a) => a.addressType === "IDENTITY");
   const fatherRel = familyRelations.find((r) => r.relation.relationshipType === "FATHER");
   const motherRel = familyRelations.find((r) => r.relation.relationshipType === "MOTHER");
-  const primaryRel = familyRelations.find((r) => r.relation.isPrimaryContact);
+  const emergencyRel =
+    familyRelations.find((r) => r.relation.isEmergencyContact) ||
+    familyRelations.find((r) => r.relation.isPrimaryContact);
 
   const completeness = calculateStudentCompleteness({
     student,
@@ -857,26 +962,55 @@ export async function getStudentFullProfile(
     },
     father: fatherRel?.member,
     mother: motherRel?.member,
-    emergencyContact: primaryRel?.member
-      ? { name: primaryRel.member.fullName, phone: primaryRel.member.phone }
+    emergencyContact: emergencyRel?.member
+      ? { name: emergencyRel.member.fullName, phone: emergencyRel.member.phone }
       : undefined,
     health,
+    characteristic: characteristicSummary,
+    aidRecords,
     documents,
   });
 
+  const canAccessSensitive = canAccessSensitiveStudentData(actor);
+
+  // RBAC projection: mask sensitive data for unprivileged roles (FIN-001)
+  const studentProjected = {
+    ...student,
+    nik: canAccessSensitive ? student.nik : maskNik(student.nik),
+    familyCardNumber: canAccessSensitive
+      ? student.familyCardNumber
+      : maskNik(student.familyCardNumber),
+    birthCertificateNumber: canAccessSensitive
+      ? student.birthCertificateNumber
+      : maskNik(student.birthCertificateNumber),
+  };
+
+  const familyProjected = familyRelations.map((fr) => ({
+    ...fr.relation,
+    member: {
+      ...fr.member,
+      nik: canAccessSensitive ? fr.member.nik : maskNik(fr.member.nik),
+      phone: canAccessSensitive ? fr.member.phone : maskPhone(fr.member.phone),
+      monthlyIncomeRange: canAccessSensitive ? fr.member.monthlyIncomeRange : null,
+    },
+  }));
+
+  const documentsProjected = documents.map((d) => ({
+    ...d,
+    storagePath: canAccessSensitive ? d.storagePath : "[PROTECTED]",
+  }));
+
   return {
-    student,
+    student: studentProjected,
     addresses,
     enrollments,
-    family: familyRelations.map((fr) => ({
-      ...fr.relation,
-      member: fr.member,
-    })),
-    health,
+    family: familyProjected,
+    health: canAccessSensitive ? health || null : null,
     measurements,
     aidRecords,
-    documents,
+    documents: documentsProjected,
     portalGuardians: portalGuardians.map((pg) => pg.guardian),
+    characteristic: characteristicSummary,
     completeness,
   };
 }
@@ -938,44 +1072,74 @@ export async function updateStudentProfile(
   }
 
   // Check NIK uniqueness if changed
-  if (input.student.nik && (s.students as any).nik && input.student.nik !== (existing as any).nik) {
+  if (input.student.nik && input.student.nik !== existing.nik) {
     const dupNik = await db
       .select({ id: s.students.id })
       .from(s.students)
-      .where(eq((s.students as any).nik, input.student.nik))
+      .where(eq(s.students.nik, input.student.nik))
       .limit(1);
     if (dupNik.length > 0 && dupNik[0].id !== studentId) {
-      throw new HttpError(409, `NIK ${input.student.nik} sudah digunakan siswa lain`);
+      throw new HttpError(409, `NIK ${maskNik(input.student.nik)} sudah digunakan siswa lain`);
+    }
+  }
+
+  // Check NISN uniqueness if changed
+  if (input.student.nisn && input.student.nisn !== existing.nisn) {
+    const dupNisn = await db
+      .select({ id: s.students.id })
+      .from(s.students)
+      .where(eq(s.students.nisn, input.student.nisn))
+      .limit(1);
+    if (dupNisn.length > 0 && dupNisn[0].id !== studentId) {
+      throw new HttpError(409, `NISN ${input.student.nisn} sudah terdaftar di sistem`);
+    }
+  }
+
+  // Guard against changing classId or enrolledOn if invoices already exist (FIN-010 point A)
+  if (
+    input.student.classId !== existing.classId ||
+    input.student.enrolledOn !== existing.enrolledOn
+  ) {
+    const invoices = await db
+      .select()
+      .from(s.invoices)
+      .where(eq(s.invoices.studentId, studentId))
+      .limit(1);
+    if (invoices.length > 0) {
+      throw new HttpError(
+        409,
+        "Perubahan kelas/tanggal masuk siswa bertagihan memerlukan proses mutasi terpisah",
+      );
     }
   }
 
   return await db.transaction(async (tx) => {
-    // 1. Update Student core fields
-    const studentUpdateValues: any = {
-      name: input.student.name,
-      nis: input.student.nis,
-      nisn: input.student.nisn,
-      gender: input.student.gender,
-      birthPlace: input.student.birthPlace,
-      birthDate: input.student.birthDate,
-      photoUrl: input.student.photoUrl,
-      active: input.student.active ?? existing.active,
-      updatedAt: new Date(),
-    };
-    if ((s.students as any).nickname) studentUpdateValues.nickname = input.student.nickname;
-    if ((s.students as any).nik) studentUpdateValues.nik = input.student.nik;
-    if ((s.students as any).familyCardNumber) studentUpdateValues.familyCardNumber = input.student.familyCardNumber;
-    if ((s.students as any).birthCertificateNumber) studentUpdateValues.birthCertificateNumber = input.student.birthCertificateNumber;
-    if ((s.students as any).religion) studentUpdateValues.religion = input.student.religion;
-    if ((s.students as any).citizenship) studentUpdateValues.citizenship = input.student.citizenship || "WNI";
-    if ((s.students as any).birthOrder) studentUpdateValues.birthOrder = input.student.birthOrder;
-    if ((s.students as any).siblingCount) studentUpdateValues.siblingCount = input.student.siblingCount;
-    if ((s.students as any).dailyLanguage) studentUpdateValues.dailyLanguage = input.student.dailyLanguage;
-    if ((s.students as any).studentStatus) studentUpdateValues.studentStatus = input.student.studentStatus || (existing as any).studentStatus;
-
+    // 1. Update Student with all 10 schema fields typed
     const [updated] = await tx
       .update(s.students)
-      .set(studentUpdateValues)
+      .set({
+        name: input.student.name,
+        nickname: input.student.nickname || null,
+        nis: input.student.nis,
+        nisn: input.student.nisn || null,
+        nik: input.student.nik || null,
+        familyCardNumber: input.student.familyCardNumber || null,
+        birthCertificateNumber: input.student.birthCertificateNumber || null,
+        gender: input.student.gender || null,
+        birthPlace: input.student.birthPlace || null,
+        birthDate: input.student.birthDate || null,
+        photoUrl: input.student.photoUrl || null,
+        religion: input.student.religion || null,
+        citizenship: input.student.citizenship || "WNI",
+        birthOrder: input.student.birthOrder ?? null,
+        siblingCount: input.student.siblingCount ?? null,
+        dailyLanguage: input.student.dailyLanguage || null,
+        classId: input.student.classId,
+        enrolledOn: input.student.enrolledOn,
+        studentStatus: input.student.studentStatus || existing.studentStatus,
+        active: input.student.active ?? existing.active,
+        updatedAt: new Date(),
+      })
       .where(eq(s.students.id, studentId))
       .returning();
 
@@ -1010,7 +1174,54 @@ export async function updateStudentProfile(
       }
     }
 
-    // 3. Update Health Profile
+    // 3. Update / Upsert Registration Enrollment
+    if (input.registration) {
+      const [existingEnroll] = await tx
+        .select()
+        .from(s.studentEnrollments)
+        .where(eq(s.studentEnrollments.studentId, studentId))
+        .limit(1);
+
+      if (existingEnroll) {
+        await tx
+          .update(s.studentEnrollments)
+          .set({
+            registrationNumber: input.registration.registrationNumber,
+            registrationType: input.registration.registrationType || "NEW_STUDENT",
+            registrationDate: input.registration.registrationDate,
+            acceptedDate: input.registration.acceptedDate,
+            entryGrade: input.registration.entryGrade || 1,
+            attendedPaud: input.registration.attendedPaud,
+            attendedKindergarten: input.registration.attendedKindergarten,
+            previousSchoolName: input.registration.previousSchoolName,
+            previousSchoolNpsn: input.registration.previousSchoolNpsn,
+            previousSchoolAddress: input.registration.previousSchoolAddress,
+            notes: input.registration.notes,
+            updatedAt: new Date(),
+          })
+          .where(eq(s.studentEnrollments.id, existingEnroll.id));
+      } else {
+        await tx.insert(s.studentEnrollments).values({
+          studentId,
+          classId: input.student.classId,
+          registrationNumber: input.registration.registrationNumber,
+          registrationType: input.registration.registrationType || "NEW_STUDENT",
+          registrationDate: input.registration.registrationDate,
+          acceptedDate: input.registration.acceptedDate,
+          enrollmentDate: input.student.enrolledOn,
+          entryGrade: input.registration.entryGrade || 1,
+          attendedPaud: input.registration.attendedPaud,
+          attendedKindergarten: input.registration.attendedKindergarten,
+          previousSchoolName: input.registration.previousSchoolName,
+          previousSchoolNpsn: input.registration.previousSchoolNpsn,
+          previousSchoolAddress: input.registration.previousSchoolAddress,
+          enrollmentStatus: "ACTIVE",
+          notes: input.registration.notes,
+        });
+      }
+    }
+
+    // 4. Update / Upsert Health Profile
     if (input.health) {
       await tx
         .insert(s.studentHealthProfiles)
@@ -1045,6 +1256,148 @@ export async function updateStudentProfile(
         });
     }
 
+    // 5. Update Family Members
+    if (input.family) {
+      let emergencyContactLinked = false;
+      const emName = input.family.emergencyContact?.name?.trim().toLowerCase();
+      const emPhone = input.family.emergencyContact?.phone?.trim();
+
+      const handleMemberUpdate = async (
+        entry: z.infer<typeof familyMemberSelectionSchema> | undefined,
+        relType: (typeof RELATIONSHIP_TYPES)[number],
+        isPrimary: boolean,
+        isPayment: boolean,
+      ) => {
+        if (!entry || entry.mode === "none") return;
+        let memberId = entry.familyMemberId;
+        let memberName = "";
+        let memberPhone = "";
+
+        if (entry.mode === "new" && entry.data) {
+          const [newMem] = await tx
+            .insert(s.familyMembers)
+            .values({
+              fullName: entry.data.fullName,
+              nik: entry.data.nik,
+              birthPlace: entry.data.birthPlace,
+              birthDate: entry.data.birthDate,
+              birthYear: entry.data.birthYear,
+              lifeStatus: entry.data.lifeStatus || "ALIVE",
+              education: entry.data.education,
+              occupation: entry.data.occupation,
+              institutionName: entry.data.institutionName,
+              monthlyIncomeRange: entry.data.monthlyIncomeRange,
+              phone: entry.data.phone,
+              email: entry.data.email,
+              address: entry.data.address,
+            })
+            .returning();
+          memberId = newMem.id;
+          memberName = newMem.fullName;
+          memberPhone = newMem.phone || "";
+        } else if (memberId && entry.data) {
+          await tx
+            .update(s.familyMembers)
+            .set({
+              fullName: entry.data.fullName,
+              nik: entry.data.nik,
+              education: entry.data.education,
+              occupation: entry.data.occupation,
+              institutionName: entry.data.institutionName,
+              monthlyIncomeRange: entry.data.monthlyIncomeRange,
+              phone: entry.data.phone,
+              email: entry.data.email,
+              address: entry.data.address,
+              lifeStatus: entry.data.lifeStatus || "ALIVE",
+              updatedAt: new Date(),
+            })
+            .where(eq(s.familyMembers.id, memberId));
+          memberName = entry.data.fullName;
+          memberPhone = entry.data.phone || "";
+        }
+
+        if (memberId) {
+          const isThisEmergency =
+            !emergencyContactLinked &&
+            emName &&
+            (memberName.trim().toLowerCase() === emName ||
+              (emPhone && memberPhone && memberPhone === emPhone));
+
+          if (isThisEmergency) emergencyContactLinked = true;
+
+          // Delete existing relationship for this relType to prevent duplicate
+          await tx
+            .delete(s.studentFamilyMembers)
+            .where(
+              and(
+                eq(s.studentFamilyMembers.studentId, studentId),
+                eq(s.studentFamilyMembers.relationshipType, relType),
+              ),
+            );
+
+          await tx.insert(s.studentFamilyMembers).values({
+            studentId,
+            familyMemberId: memberId,
+            relationshipType: relType,
+            isPrimaryContact: isPrimary,
+            isPaymentResponsible: isPayment,
+            isEmergencyContact: Boolean(isThisEmergency),
+          });
+        }
+      };
+
+      const isFatherPrimary = input.family.primaryContact === "FATHER";
+      const isMotherPrimary = input.family.primaryContact === "MOTHER";
+      const isGuardianPrimary = input.family.primaryContact === "GUARDIAN";
+
+      const isFatherPayment = input.family.paymentResponsible === "FATHER";
+      const isMotherPayment = input.family.paymentResponsible === "MOTHER";
+      const isGuardianPayment = input.family.paymentResponsible === "GUARDIAN";
+
+      await handleMemberUpdate(input.family.father, "FATHER", isFatherPrimary, isFatherPayment);
+      await handleMemberUpdate(input.family.mother, "MOTHER", isMotherPrimary, isMotherPayment);
+      if (input.family.guardian) {
+        await handleMemberUpdate(
+          input.family.guardian,
+          input.family.guardianRelationship || "OTHER_GUARDIAN",
+          isGuardianPrimary,
+          isGuardianPayment,
+        );
+      }
+    }
+
+    // 6. Insert new measurements if provided
+    if (input.measurements && input.measurements.length > 0) {
+      for (const m of input.measurements) {
+        await tx.insert(s.studentPeriodicData).values({
+          studentId,
+          academicYearId: m.academicYearId || undefined,
+          semester: m.semester || 1,
+          measurementDate: m.measurementDate,
+          heightCm: m.heightCm.toString(),
+          weightKg: m.weightKg.toString(),
+          notes: m.notes,
+          recordedBy: ctx.actor.id,
+        });
+      }
+    }
+
+    // 7. Insert new aid records if provided
+    if (input.aid && input.aid.length > 0) {
+      for (const a of input.aid) {
+        await tx.insert(s.studentAidRecords).values({
+          studentId,
+          aidType: a.aidType,
+          aidNumber: a.aidNumber,
+          aidSource: a.aidSource,
+          startDate: a.startDate,
+          endDate: a.endDate,
+          status: a.status || "ACTIVE",
+          notes: a.notes,
+        });
+      }
+    }
+
     // Audit log
     await audit(tx, ctx, "UPDATE", "students", studentId, existing, updated);
 
@@ -1067,6 +1420,9 @@ export async function saveStudentDraft(
       .from(s.studentDrafts)
       .where(and(eq(s.studentDrafts.id, draftId), eq(s.studentDrafts.userId, actor.id)));
     if (!existing) throw new HttpError(404, "Draft tidak ditemukan");
+    if (existing.status === "FINALIZED") {
+      throw new HttpError(409, "Draf sudah difinalisasi dan tidak dapat diubah lagi");
+    }
 
     const [updated] = await db
       .update(s.studentDrafts)
@@ -1134,15 +1490,6 @@ export async function deleteStudentDraft(
 
 // --- Measurements & Aid ---
 
-export const periodicMeasurementSchema = z.object({
-  academicYearId: uuid.nullable().optional(),
-  semester: z.number().int().min(1).max(2).default(1),
-  measurementDate: date,
-  heightCm: z.coerce.number().positive("Tinggi badan harus angka positif").max(250),
-  weightKg: z.coerce.number().positive("Berat badan harus angka positif").max(200),
-  notes: z.string().trim().max(500).nullable().optional(),
-});
-
 export async function addPeriodicMeasurement(
   db: Database,
   ctx: Context,
@@ -1203,8 +1550,12 @@ export const registerDocSchema = z.object({
   documentNumber: z.string().trim().max(100).nullable().optional(),
   storagePath: z.string().trim().min(1),
   originalFilename: z.string().trim().min(1).max(300),
-  mimeType: z.string().trim().min(1),
-  fileSize: z.number().int().positive().max(10 * 1024 * 1024),
+  mimeType: z.enum(["image/jpeg", "image/png", "application/pdf", "image/webp"]),
+  fileSize: z
+    .number()
+    .int()
+    .positive()
+    .max(5 * 1024 * 1024, "Ukuran dokumen maksimal 5 MB"),
 });
 
 export async function registerStudentDocument(
@@ -1215,6 +1566,11 @@ export async function registerStudentDocument(
 ) {
   await ownStudent(db, ctx.actor, studentId);
   const data = registerDocSchema.parse(input);
+
+  // Validate storage path prefix and actor binding to prevent IDOR / arbitrary storagePath
+  if (!data.storagePath.startsWith(`student-documents/${ctx.actor.id}/`)) {
+    throw new HttpError(422, "Jalur penyimpanan dokumen tidak sah");
+  }
 
   const [created] = await db
     .insert(s.studentDocuments)
@@ -1276,8 +1632,43 @@ export async function reviewStudentDocument(
 
 // --- Guardian Profile Change Request ---
 
+export const ALLOWED_GUARDIAN_PATCH_KEYS = new Set([
+  "nickname",
+  "birthPlace",
+  "birthDate",
+  "dailyLanguage",
+  "birthOrder",
+  "siblingCount",
+  "religion",
+  "citizenship",
+  "address",
+  "street",
+  "rt",
+  "rw",
+  "hamlet",
+  "village",
+  "district",
+  "regency",
+  "province",
+  "postalCode",
+  "phone",
+  "guardianPhone",
+  "guardianAddress",
+  "domicileStreet",
+  "reason",
+]);
+
 export const changeRequestSchema = z.object({
-  patch: z.record(z.string(), z.any()),
+  patch: z.record(z.string(), z.any()).refine((p) => {
+    for (const key of Object.keys(p)) {
+      if (!ALLOWED_GUARDIAN_PATCH_KEYS.has(key)) {
+        return false;
+      }
+    }
+    return true;
+  }, {
+    message: "Pengajuan memuat kolom yang tidak diizinkan untuk diubah secara mandiri",
+  }),
 });
 
 export async function requestProfileChange(
@@ -1307,9 +1698,66 @@ export async function requestProfileChange(
   return created;
 }
 
-export async function getProfileChangeRequests(db: Database, actor: Actor) {
-  allow(actor, "master");
+export async function getProfileChangeRequests(db: Database, actor: Actor, studentId?: string) {
   try {
+    if (isGuardian(actor)) {
+      if (studentId) {
+        await ownStudent(db, actor, studentId);
+        return await db
+          .select({
+            request: s.studentProfileChangeRequests,
+            student: {
+              id: s.students.id,
+              name: s.students.name,
+              nis: s.students.nis,
+            },
+            user: {
+              id: s.users.id,
+              name: s.users.name,
+              email: s.users.email,
+            },
+          })
+          .from(s.studentProfileChangeRequests)
+          .innerJoin(s.students, eq(s.students.id, s.studentProfileChangeRequests.studentId))
+          .innerJoin(s.users, eq(s.users.id, s.studentProfileChangeRequests.requestedBy))
+          .where(eq(s.studentProfileChangeRequests.studentId, studentId))
+          .orderBy(desc(s.studentProfileChangeRequests.createdAt));
+      }
+
+      const rows = await db
+        .select({ studentId: s.guardianStudents.studentId })
+        .from(s.guardianStudents)
+        .innerJoin(s.guardians, eq(s.guardians.id, s.guardianStudents.guardianId))
+        .where(eq(s.guardians.userId, actor.id));
+      const accessible = rows.map((r) => r.studentId);
+      if (accessible.length === 0) return [];
+
+      return await db
+        .select({
+          request: s.studentProfileChangeRequests,
+          student: {
+            id: s.students.id,
+            name: s.students.name,
+            nis: s.students.nis,
+          },
+          user: {
+            id: s.users.id,
+            name: s.users.name,
+            email: s.users.email,
+          },
+        })
+        .from(s.studentProfileChangeRequests)
+        .innerJoin(s.students, eq(s.students.id, s.studentProfileChangeRequests.studentId))
+        .innerJoin(s.users, eq(s.users.id, s.studentProfileChangeRequests.requestedBy))
+        .where(inArray(s.studentProfileChangeRequests.studentId, accessible))
+        .orderBy(desc(s.studentProfileChangeRequests.createdAt));
+    }
+
+    allow(actor, "master");
+    const condition = studentId
+      ? eq(s.studentProfileChangeRequests.studentId, studentId)
+      : eq(s.studentProfileChangeRequests.status, "SUBMITTED");
+
     return await db
       .select({
         request: s.studentProfileChangeRequests,
@@ -1327,7 +1775,7 @@ export async function getProfileChangeRequests(db: Database, actor: Actor) {
       .from(s.studentProfileChangeRequests)
       .innerJoin(s.students, eq(s.students.id, s.studentProfileChangeRequests.studentId))
       .innerJoin(s.users, eq(s.users.id, s.studentProfileChangeRequests.requestedBy))
-      .where(eq(s.studentProfileChangeRequests.status, "SUBMITTED"))
+      .where(condition)
       .orderBy(desc(s.studentProfileChangeRequests.createdAt));
   } catch (err: any) {
     if (err?.code === "42P01" || err?.code === "42703") return [];
@@ -1353,28 +1801,73 @@ export async function reviewProfileChange(
     .where(eq(s.studentProfileChangeRequests.id, requestId));
   if (!reqRecord) throw new HttpError(404, "Pengajuan tidak ditemukan");
 
+  if (reqRecord.status !== "SUBMITTED") {
+    throw new HttpError(409, "Pengajuan sudah diputuskan sebelumnya");
+  }
+
   return await db.transaction(async (tx) => {
     if (approved) {
       const patch = reqRecord.patch as Record<string, any>;
-      const allowedStudentFields = [
-        "nickname",
-        "birthPlace",
-        "birthDate",
-        "dailyLanguage",
-        "birthOrder",
-        "siblingCount",
-        "religion",
-      ];
+
+      // 1. Apply Student whitelisted fields (typed)
       const studentUpdate: Record<string, any> = {};
-      for (const key of allowedStudentFields) {
-        if (patch[key] !== undefined && (s.students as any)[key]) studentUpdate[key] = patch[key];
-      }
+      if (patch.nickname !== undefined) studentUpdate.nickname = patch.nickname;
+      if (patch.birthPlace !== undefined) studentUpdate.birthPlace = patch.birthPlace;
+      if (patch.birthDate !== undefined) studentUpdate.birthDate = patch.birthDate;
+      if (patch.dailyLanguage !== undefined) studentUpdate.dailyLanguage = patch.dailyLanguage;
+      if (patch.birthOrder !== undefined) studentUpdate.birthOrder = patch.birthOrder;
+      if (patch.siblingCount !== undefined) studentUpdate.siblingCount = patch.siblingCount;
+      if (patch.religion !== undefined) studentUpdate.religion = patch.religion;
+      if (patch.citizenship !== undefined) studentUpdate.citizenship = patch.citizenship;
+
       if (Object.keys(studentUpdate).length > 0) {
         studentUpdate.updatedAt = new Date();
         await tx
           .update(s.students)
           .set(studentUpdate)
           .where(eq(s.students.id, reqRecord.studentId));
+      }
+
+      // 2. Apply address updates if present in patch
+      const addrStreet = patch.address || patch.domicileStreet;
+      if (addrStreet || patch.village || patch.district || patch.regency || patch.postalCode) {
+        const [existingAddr] = await tx
+          .select()
+          .from(s.studentAddresses)
+          .where(
+            and(
+              eq(s.studentAddresses.studentId, reqRecord.studentId),
+              eq(s.studentAddresses.addressType, "IDENTITY"),
+            ),
+          )
+          .limit(1);
+
+        if (existingAddr) {
+          await tx
+            .update(s.studentAddresses)
+            .set({
+              address: addrStreet || existingAddr.address,
+              rt: patch.rt || existingAddr.rt,
+              rw: patch.rw || existingAddr.rw,
+              hamlet: patch.hamlet || existingAddr.hamlet,
+              village: patch.village || existingAddr.village,
+              district: patch.district || existingAddr.district,
+              regency: patch.regency || existingAddr.regency,
+              province: patch.province || existingAddr.province,
+              postalCode: patch.postalCode || existingAddr.postalCode,
+              updatedAt: new Date(),
+            })
+            .where(eq(s.studentAddresses.id, existingAddr.id));
+        }
+      }
+
+      // 3. Apply guardian phone updates if present in patch
+      const newPhone = patch.phone || patch.guardianPhone;
+      if (newPhone) {
+        await tx
+          .update(s.guardians)
+          .set({ phone: newPhone, updatedAt: new Date() })
+          .where(eq(s.guardians.userId, reqRecord.requestedBy));
       }
     }
 
@@ -1383,7 +1876,7 @@ export async function reviewProfileChange(
       .set({
         status: approved ? "APPROVED" : "REJECTED",
         reviewerId: ctx.actor.id,
-        rejectionReason: approved ? null : rejectionReason,
+        rejectionReason: approved ? null : (rejectionReason || null),
         reviewedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1392,5 +1885,270 @@ export async function reviewProfileChange(
 
     await audit(tx, ctx, "UPDATE", "student_profile_change_requests", requestId, reqRecord, updatedReq);
     return updatedReq;
+  });
+}
+
+// --- Import Preview & Commit (FIN-005) ---
+
+export type ImportRowPreview = {
+  rowNum: number;
+  nis: string;
+  nisn: string | null;
+  name: string;
+  gender: string;
+  birthPlace: string | null;
+  birthDate: string | null;
+  className: string | null;
+  resolvedClassId: string | null;
+  fatherName: string | null;
+  motherName: string | null;
+  guardianPhone: string | null;
+  address: string | null;
+  isValid: boolean;
+  errors: string[];
+};
+
+export async function previewStudentImport(
+  db: Database,
+  actor: Actor,
+  inputRows: Array<Record<string, string>>,
+) {
+  allow(actor, "master");
+
+  const existingStudents = await db
+    .select({
+      id: s.students.id,
+      nis: s.students.nis,
+      nisn: s.students.nisn,
+      nik: s.students.nik,
+    })
+    .from(s.students);
+
+  const existingNisSet = new Set(existingStudents.map((st) => st.nis.trim().toLowerCase()));
+  const existingNisnSet = new Set(
+    existingStudents.filter((st) => st.nisn).map((st) => st.nisn!.trim().toLowerCase()),
+  );
+
+  const classes = await db.select().from(s.classes);
+  const classMap = new Map<string, string>();
+  classes.forEach((c) => {
+    classMap.set(c.name.trim().toLowerCase(), c.id);
+  });
+
+  const fileNisSet = new Set<string>();
+  const previewRows: ImportRowPreview[] = [];
+
+  for (let i = 0; i < inputRows.length; i++) {
+    const raw = inputRows[i];
+    const rowNum = i + 1;
+    const errors: string[] = [];
+
+    const nis = (raw["NIS"] || raw["NO_INDUK"] || raw["nis"] || "").trim();
+    const nisn = (raw["NISN"] || raw["nisn"] || "").trim() || null;
+    const name = (raw["NAMA_LENGKAP"] || raw["NAMA"] || raw["name"] || "").trim();
+    let gender = (raw["JENIS_KELAMIN"] || raw["JK"] || raw["gender"] || "").trim().toUpperCase();
+    if (gender === "LAKI-LAKI" || gender === "PRIA") gender = "L";
+    if (gender === "PEREMPUAN" || gender === "WANITA") gender = "P";
+    if (!["L", "P"].includes(gender)) gender = "L";
+
+    const birthPlace = (raw["TEMPAT_LAHIR"] || raw["birthPlace"] || "").trim() || null;
+    const birthDate = (raw["TANGGAL_LAHIR"] || raw["birthDate"] || "").trim() || null;
+    const className = (raw["KELAS"] || raw["className"] || "").trim() || null;
+    const fatherName = (raw["NAMA_AYAH"] || raw["AYAH"] || raw["fatherName"] || "").trim() || null;
+    const motherName = (raw["NAMA_IBU"] || raw["IBU"] || raw["motherName"] || "").trim() || null;
+    const guardianPhone = (raw["NO_HP_WALI"] || raw["HP"] || raw["guardianPhone"] || "").trim() || null;
+    const address = (raw["ALAMAT"] || raw["address"] || "").trim() || null;
+
+    if (!nis) {
+      errors.push("NIS wajib diisi");
+    } else {
+      const lowerNis = nis.toLowerCase();
+      if (fileNisSet.has(lowerNis)) {
+        errors.push(`NIS ${nis} duplikat di dalam berkas`);
+      } else if (existingNisSet.has(lowerNis)) {
+        errors.push(`NIS ${nis} sudah terdaftar di sistem`);
+      }
+      fileNisSet.add(lowerNis);
+    }
+
+    if (!name) {
+      errors.push("Nama siswa wajib diisi");
+    }
+
+    if (nisn && nisn.length !== 10) {
+      errors.push("NISN harus tepat 10 digit");
+    } else if (nisn && existingNisnSet.has(nisn.toLowerCase())) {
+      errors.push(`NISN ${nisn} sudah terdaftar di sistem`);
+    }
+
+    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      errors.push("Format tanggal lahir harus YYYY-MM-DD");
+    }
+
+    let resolvedClassId: string | null = null;
+    if (className) {
+      resolvedClassId = classMap.get(className.toLowerCase()) || null;
+      if (!resolvedClassId) {
+        const found = classes.find((c) =>
+          c.name.toLowerCase().includes(className.toLowerCase()),
+        );
+        if (found) resolvedClassId = found.id;
+      }
+    }
+    if (!resolvedClassId && classes.length > 0) {
+      resolvedClassId = classes[0].id;
+    }
+
+    previewRows.push({
+      rowNum,
+      nis,
+      nisn,
+      name,
+      gender,
+      birthPlace,
+      birthDate,
+      className,
+      resolvedClassId,
+      fatherName,
+      motherName,
+      guardianPhone,
+      address,
+      isValid: errors.length === 0,
+      errors,
+    });
+  }
+
+  const validRows = previewRows.filter((r) => r.isValid);
+  return {
+    totalRows: previewRows.length,
+    validRowsCount: validRows.length,
+    invalidRowsCount: previewRows.length - validRows.length,
+    rows: previewRows,
+  };
+}
+
+export async function commitStudentImport(
+  db: Database,
+  ctx: Context,
+  validRows: ImportRowPreview[],
+) {
+  allow(ctx.actor, "master");
+  if (!validRows || validRows.length === 0) {
+    throw new HttpError(400, "Tidak ada baris data valid untuk diimpor");
+  }
+
+  const classes = await db.select().from(s.classes);
+  const defaultClassId = classes[0]?.id;
+  if (!defaultClassId) throw new HttpError(500, "Master kelas belum terkonfigurasi");
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  return await db.transaction(async (tx) => {
+    let createdCount = 0;
+    const createdIds: string[] = [];
+    const errors: Array<{ rowNum: number; message: string }> = [];
+
+    for (const row of validRows) {
+      try {
+        const [student] = await tx
+          .insert(s.students)
+          .values({
+            name: row.name,
+            nis: row.nis,
+            nisn: row.nisn,
+            gender: row.gender,
+            birthPlace: row.birthPlace,
+            birthDate: row.birthDate,
+            classId: row.resolvedClassId || defaultClassId,
+            enrolledOn: todayStr,
+            active: true,
+            studentStatus: "ACTIVE",
+          })
+          .returning();
+
+        createdIds.push(student.id);
+        createdCount++;
+
+        // Add identity address if provided
+        if (row.address) {
+          await tx.insert(s.studentAddresses).values({
+            studentId: student.id,
+            addressType: "IDENTITY",
+            address: row.address,
+          });
+        }
+
+        // Add enrollment record
+        await tx.insert(s.studentEnrollments).values({
+          studentId: student.id,
+          classId: row.resolvedClassId || defaultClassId,
+          registrationType: "NEW_STUDENT",
+          registrationDate: todayStr,
+          enrollmentDate: todayStr,
+          enrollmentStatus: "ACTIVE",
+        });
+
+        // Add father if provided
+        if (row.fatherName) {
+          const [father] = await tx
+            .insert(s.familyMembers)
+            .values({
+              fullName: row.fatherName,
+              phone: row.guardianPhone,
+              address: row.address,
+              lifeStatus: "ALIVE",
+            })
+            .returning();
+
+          await tx.insert(s.studentFamilyMembers).values({
+            studentId: student.id,
+            familyMemberId: father.id,
+            relationshipType: "FATHER",
+            isPrimaryContact: true,
+            isPaymentResponsible: true,
+          });
+        }
+
+        // Add mother if provided
+        if (row.motherName) {
+          const [mother] = await tx
+            .insert(s.familyMembers)
+            .values({
+              fullName: row.motherName,
+              address: row.address,
+              lifeStatus: "ALIVE",
+            })
+            .returning();
+
+          await tx.insert(s.studentFamilyMembers).values({
+            studentId: student.id,
+            familyMemberId: mother.id,
+            relationshipType: "MOTHER",
+            isPrimaryContact: !row.fatherName,
+            isPaymentResponsible: !row.fatherName,
+          });
+        }
+      } catch (err: any) {
+        errors.push({
+          rowNum: row.rowNum,
+          message: err?.message || "Gagal mengimpor siswa",
+        });
+      }
+    }
+
+    await audit(tx, ctx, "IMPORT", "students", undefined, undefined, {
+      total: validRows.length,
+      createdCount,
+      failedCount: errors.length,
+    });
+
+    return {
+      success: true,
+      createdCount,
+      failedCount: errors.length,
+      skippedCount: validRows.length - createdCount - errors.length,
+      createdIds,
+      errors,
+    };
   });
 }

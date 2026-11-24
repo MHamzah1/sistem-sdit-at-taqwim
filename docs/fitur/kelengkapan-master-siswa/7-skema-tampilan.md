@@ -1,6 +1,15 @@
-# 7. Skema Tampilan Wajib — Master Siswa SDIT AT-TAQWIM
+# 7. Skema Tampilan Wajib & UI FREEZE — Master Siswa SDIT AT-TAQWIM
 
-## 1. Aturan Desain Visual
+> [!IMPORTANT]
+> **MANDATORY UI FREEZE:** Baseline visual Master Siswa telah diperbaiki dan disetujui pengguna pada commit `e3b88d4` menggunakan Base Component.
+> Seluruh layout desktop 2-panel, sidebar navigasi 10 section, warna palet emerald/zinc, spacing, tipografi, dan penataan field berstatus **DIKUNCI (FROZEN)**.
+> Segala perubahan pada frontend hanya diizinkan untuk:
+> 1. Wiring event handler dan state management.
+> 2. Validasi input dan mapping DTO server-side.
+> 3. Integrasi pemanggilan API backend aktual (menghapus simulasi/mock).
+> 4. Penanganan pesan error/retry di slot visual yang sudah ada.
+
+## 1. Aturan Desain Visual & UI Freeze
 1. Mengikuti brand token SDIT AT-TAQWIM: palet hijau islami `#10b981`/`#059669`, tipografi sans-serif modern, radius sudut konsisten, focus visible ring, dan ikon Lucide React.
 2. Layout Desktop 1440px: Form menggunakan layout 2 panel (Sidebar Navigasi 10 Section di sebelah kiri selebar ~260px, panel konten aktif di kanan selebar ~75%).
 3. Layout Mobile 390px: Navigasi section berupa dropdown selector/accordion di bagian atas form, konten 1 kolom, footer action bar sticky di bawah dengan tombol responsif.

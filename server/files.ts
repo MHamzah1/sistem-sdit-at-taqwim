@@ -230,20 +230,36 @@ export async function downloadStudentDocument(
   );
   await ownStudent(db, ctx.actor, doc.studentId);
 
-  const range = request.headers.get("range");
-  const chunk = range && /^bytes=(\d+)-(\d+)$/.exec(range);
-  const start = chunk ? Number(chunk[1]) : 0;
-  const end = chunk
-    ? Math.min(Number(chunk[2]), doc.fileSize - 1)
-    : Math.min(doc.fileSize - 1, 2 * 1024 * 1024 - 1);
-  if (start < 0 || start > end || end - start + 1 > 2 * 1024 * 1024)
-    throw new HttpError(416, "Rentang file tidak valid");
   const file = requireValue(
     await get(doc.storagePath, { access: "private", useCache: false }),
     "File tidak ditemukan",
   );
   if (file.statusCode !== 200 || !file.stream)
     throw new HttpError(404, "File tidak ditemukan di penyimpanan");
+
+  const range = request.headers.get("range");
+  if (!range) {
+    const fullBytes = Buffer.from(await new Response(file.stream).arrayBuffer());
+    return new Response(fullBytes, {
+      status: 200,
+      headers: {
+        "Content-Type": doc.mimeType,
+        "Content-Disposition": `inline; filename="${doc.originalFilename}"`,
+        "Content-Length": doc.fileSize.toString(),
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
+  const chunk = range && /^bytes=(\d+)-(\d*)$/.exec(range);
+  const start = chunk ? Number(chunk[1]) : 0;
+  const end = chunk && chunk[2]
+    ? Math.min(Number(chunk[2]), doc.fileSize - 1)
+    : Math.min(doc.fileSize - 1, start + 2 * 1024 * 1024 - 1);
+  if (start < 0 || start > end || end >= doc.fileSize)
+    throw new HttpError(416, "Rentang file tidak valid");
   const bytes = Buffer.from(await new Response(file.stream).arrayBuffer());
   return new Response(bytes.subarray(start, end + 1), {
     status: 206,

@@ -158,10 +158,22 @@ export const students = pgTable(
       .notNull(),
     enrolledOn: date("enrolled_on").notNull(),
     active: boolean("active").default(true).notNull(),
+    nickname: text("nickname"),
+    nik: text("nik"),
+    familyCardNumber: text("family_card_number"),
+    birthCertificateNumber: text("birth_certificate_number"),
+    religion: text("religion"),
+    citizenship: text("citizenship").default("WNI"),
+    birthOrder: integer("birth_order"),
+    siblingCount: integer("sibling_count"),
+    dailyLanguage: text("daily_language"),
+    studentStatus: text("student_status").default("ACTIVE").notNull(),
     ...times(),
   },
   (t) => [
     index("students_class_idx").on(t.classId),
+    uniqueIndex("students_nik_idx").on(t.nik),
+    uniqueIndex("students_nisn_idx").on(t.nisn),
     check(
       "student_gender_check",
       sql`${t.gender} IS NULL OR ${t.gender} IN ('L', 'P')`,
@@ -508,7 +520,10 @@ export const studentAddresses = pgTable(
     travelTimeMinutes: integer("travel_time_minutes"),
     ...times(),
   },
-  (t) => [index("address_student_idx").on(t.studentId)],
+  (t) => [
+    index("address_student_idx").on(t.studentId),
+    uniqueIndex("student_address_type_idx").on(t.studentId, t.addressType),
+  ],
 );
 
 export const familyMembers = pgTable(
@@ -552,6 +567,11 @@ export const studentFamilyMembers = pgTable(
   (t) => [
     index("fam_rel_student_idx").on(t.studentId),
     index("fam_rel_member_idx").on(t.familyMemberId),
+    uniqueIndex("student_fam_member_rel_idx").on(
+      t.studentId,
+      t.familyMemberId,
+      t.relationshipType,
+    ),
   ],
 );
 
@@ -640,7 +660,9 @@ export const studentAidRecords = pgTable(
     endDate: date("end_date"),
     status: text("status").default("ACTIVE").notNull(),
     notes: text("notes"),
-    supportingDocumentId: uuid("supporting_document_id"),
+    supportingDocumentId: uuid("supporting_document_id").references(
+      () => studentDocuments.id,
+    ),
     ...times(),
   },
   (t) => [index("aid_student_idx").on(t.studentId)],

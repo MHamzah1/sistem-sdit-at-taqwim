@@ -43,14 +43,11 @@ type Student = AppState["students"][number];
 
 function estimateCompleteness(s: Student): number {
   let score = 0;
-  const total = 6;
-  if (s.name) score++;
-  if (s.nis) score++;
-  if (s.gender) score++;
-  if (s.birthPlace) score++;
-  if (s.birthDate) score++;
-  if (s.classId) score++;
-  return Math.round((score / total) * 100);
+  const totalSections = 10;
+  if (s.name && s.nis && (s.gender || s.birthDate)) score += 1;
+  if (s.classId && s.enrolledOn) score += 1;
+  if (s.photoUrl) score += 0.5;
+  return Math.round((score / totalSections) * 100);
 }
 
 export default function MasterSiswaPage() {
@@ -78,6 +75,10 @@ export default function MasterSiswaPage() {
   const [importRows, setImportRows] = useState<any[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [isProcessingImport, setIsProcessingImport] = useState(false);
+  const [importCommitResult, setImportCommitResult] = useState<{
+    createdCount: number;
+    failedCount: number;
+  } | null>(null);
 
   // Export modal state
   const [showExportModal, setShowExportModal] = useState(false);
@@ -164,25 +165,26 @@ export default function MasterSiswaPage() {
     }
   };
 
-  const handleReviewChangeRequest = async (id: string, status: "APPROVED" | "REJECTED") => {
+  const handleReviewChangeRequest = async (id: string, action: "APPROVED" | "REJECTED") => {
+    if (action === "REJECTED" && !reviewNotes.trim()) {
+      alert("Alasan penolakan pengajuan wajib diisi");
+      return;
+    }
     try {
-      const res = await fetch(`/api/student-profile-change-requests/${id}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, reviewNotes }),
+      await api(`student-profile-change-requests/${id}/review`, "POST", {
+        approved: action === "APPROVED",
+        rejectionReason: action === "REJECTED" ? reviewNotes.trim() : undefined,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Gagal memproses review.");
-      }
       setChangeRequests((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status, reviewNotes } : r)),
+        prev.map((r) =>
+          r.id === id ? { ...r, status: action, rejectionReason: reviewNotes } : r,
+        ),
       );
       setReviewingReqId(null);
       setReviewNotes("");
-      alert(`Pengajuan berhasil di-${status === "APPROVED" ? "setujui" : "tolak"}`);
+      alert(`Pengajuan berhasil di-${action === "APPROVED" ? "setujui" : "tolak"}`);
     } catch (err: any) {
-      alert(err.message);
+      alert(err.message || "Gagal memproses review pengajuan.");
     }
   };
 
@@ -303,17 +305,18 @@ export default function MasterSiswaPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const text = evt.target?.result as string;
       const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
       if (lines.length < 2) {
-        setImportErrors(["Berkas CSV kosong atau tidak memiliki baris data."]);
+        setImportErrors(["Berkas data kosong atau tidak memiliki baris data."]);
         return;
       }
 
-      const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim().toUpperCase());
-      const parsedRows: any[] = [];
-      const errors: string[] = [];
+      const headers = lines[0]
+        .split(",")
+        .map((h) => h.replace(/^["'\uFEFF]|["']$/g, "").trim().toUpperCase());
+      const rawRows: Record<string, string>[] = [];
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(",").map((v) => v.replace(/^"|"$/g, "").trim());
@@ -321,32 +324,26 @@ export default function MasterSiswaPage() {
         headers.forEach((h, idx) => {
           rowData[h] = values[idx] || "";
         });
-
-        // Basic validation
-        const nis = rowData["NIS"] || rowData["NO_INDUK"] || "";
-        const name = rowData["NAMA_LENGKAP"] || rowData["NAMA"] || "";
-        if (!nis) {
-          errors.push(`Baris ${i + 1}: NIS wajib diisi.`);
-        }
-        if (!name) {
-          errors.push(`Baris ${i + 1}: Nama Siswa wajib diisi.`);
-        }
-
-        parsedRows.push({
-          rowNum: i + 1,
-          nis,
-          name,
-          gender: rowData["JENIS_KELAMIN"] || "L",
-          birthPlace: rowData["TEMPAT_LAHIR"] || "",
-          birthDate: rowData["TANGGAL_LAHIR"] || "",
-          className: rowData["KELAS"] || "",
-          isValid: !errors.some((e) => e.startsWith(`Baris ${i + 1}`)),
-        });
+        rawRows.push(rowData);
       }
 
-      setImportRows(parsedRows);
-      setImportErrors(errors);
-      setImportStep(3);
+      try {
+        setIsProcessingImport(true);
+        const preview = await api<any>("students/import/preview", "POST", rawRows);
+        setImportRows(preview.rows || []);
+        const errs: string[] = [];
+        (preview.rows || []).forEach((r: any) => {
+          if (!r.isValid && r.errors?.length) {
+            errs.push(`Baris ${r.rowNum}: ${r.errors.join(", ")}`);
+          }
+        });
+        setImportErrors(errs);
+        setImportStep(3);
+      } catch (err: any) {
+        setImportErrors([err.message || "Gagal memproses pratinjau impor berkas."]);
+      } finally {
+        setIsProcessingImport(false);
+      }
     };
     reader.readAsText(file);
   };
@@ -1345,12 +1342,25 @@ export default function MasterSiswaPage() {
                     className="primary"
                     disabled={isProcessingImport}
                     onClick={async () => {
+                      const validRows = importRows.filter((r) => r.isValid);
+                      if (validRows.length === 0) {
+                        alert("Tidak ada baris data valid untuk diimpor");
+                        return;
+                      }
                       setIsProcessingImport(true);
-                      // Simulate processing
-                      setTimeout(() => {
-                        setIsProcessingImport(false);
+                      try {
+                        const result = await api<any>(
+                          "students/import/commit",
+                          "POST",
+                          validRows,
+                        );
+                        setImportCommitResult(result);
                         setImportStep(5);
-                      }, 1000);
+                      } catch (err: any) {
+                        alert(err.message || "Gagal melakukan impor ke server");
+                      } finally {
+                        setIsProcessingImport(false);
+                      }
                     }}
                   >
                     {isProcessingImport ? "Mengimpor..." : "Ya, Impor Sekarang"}
@@ -1365,7 +1375,8 @@ export default function MasterSiswaPage() {
                 <CheckCircle2 size={42} color="#16613e" style={{ margin: "0 auto 10px" }} />
                 <h4 style={{ margin: "0 0 6px", fontSize: 15 }}>Impor Berhasil Selesai!</h4>
                 <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 20px" }}>
-                  Sebanyak {importRows.length} siswa berhasil didaftarkan ke sistem master siswa.
+                  Sebanyak {importCommitResult?.createdCount ?? 0} siswa berhasil didaftarkan ke sistem master siswa.
+                  {importCommitResult?.failedCount ? ` (${importCommitResult.failedCount} baris gagal).` : ""}
                 </p>
                 <button
                   type="button"

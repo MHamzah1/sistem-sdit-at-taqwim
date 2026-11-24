@@ -16,7 +16,12 @@ import {
   FileCheck2,
   IdCard,
   CheckCircle2,
+  FileText,
+  Send,
+  History,
+  AlertCircle,
 } from "lucide-react";
+import { Modal } from "@/src/components/Modal";
 import { useApp } from "@/src/lib/context/AppContext";
 import { Badge } from "@/src/components/Badge";
 import { Panel } from "@/src/components/Panel";
@@ -65,6 +70,20 @@ export default function DashboardPage() {
   const [examCard, setExamCard] = useState<ExamCardData | null>(null);
   const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null);
   const [dispensationForm, setDispensationForm] = useState<FormSpec | null>(null);
+  const [changeRequestStudent, setChangeRequestStudent] = useState<Student | null>(null);
+  const [changeRequestsList, setChangeRequestsList] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [changeForm, setChangeForm] = useState({
+    phone: "",
+    street: "",
+    rt: "",
+    rw: "",
+    village: "",
+    district: "",
+    postalCode: "",
+    reason: "",
+  });
+  const [submittingChange, setSubmittingChange] = useState(false);
 
   if (loading || !state) {
     return (
@@ -148,6 +167,71 @@ export default function DashboardPage() {
           setDispensationForm(null);
         },
       });
+    };
+
+    const handleOpenChangeRequest = async (student: Student) => {
+      setChangeRequestStudent(student);
+      setLoadingRequests(true);
+      setChangeForm({
+        phone: "",
+        street: "",
+        rt: "",
+        rw: "",
+        village: "",
+        district: "",
+        postalCode: "",
+        reason: "",
+      });
+      try {
+        const res = await api<{ requests: any[] }>(`students/${student.id}/change-requests`, "GET");
+        setChangeRequestsList(res?.requests || []);
+      } catch {
+        setChangeRequestsList([]);
+      } finally {
+        setLoadingRequests(false);
+      }
+    };
+
+    const handleSubmitChangeRequest = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!changeRequestStudent) return;
+      if (!changeForm.reason.trim()) {
+        setError("Alasan pengajuan perubahan wajib diisi");
+        return;
+      }
+      setSubmittingChange(true);
+      try {
+        const patchPayload: Record<string, string> = {};
+        if (changeForm.phone.trim()) patchPayload.phone = changeForm.phone.trim();
+        if (changeForm.street.trim()) patchPayload.street = changeForm.street.trim();
+        if (changeForm.rt.trim()) patchPayload.rt = changeForm.rt.trim();
+        if (changeForm.rw.trim()) patchPayload.rw = changeForm.rw.trim();
+        if (changeForm.village.trim()) patchPayload.village = changeForm.village.trim();
+        if (changeForm.district.trim()) patchPayload.district = changeForm.district.trim();
+        if (changeForm.postalCode.trim()) patchPayload.postalCode = changeForm.postalCode.trim();
+        patchPayload.reason = changeForm.reason.trim();
+
+        await api(`students/${changeRequestStudent.id}/change-requests`, "POST", {
+          patch: patchPayload,
+        });
+        setToast("Pengajuan perubahan biodata berhasil dikirim ke Tata Usaha");
+        const res = await api<{ requests: any[] }>(`students/${changeRequestStudent.id}/change-requests`, "GET");
+        setChangeRequestsList(res?.requests || []);
+        setChangeForm({
+          phone: "",
+          street: "",
+          rt: "",
+          rw: "",
+          village: "",
+          district: "",
+          postalCode: "",
+          reason: "",
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal mengirim pengajuan perubahan");
+      } finally {
+        setSubmittingChange(false);
+      }
     };
 
     return (
@@ -250,7 +334,20 @@ export default function DashboardPage() {
                           </span>
                         </div>
                       </div>
-                      <Badge status={elig?.status || "NOT_EVALUATED"} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge status={elig?.status || "NOT_EVALUATED"} />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          title="Ajukan Pembaruan Biodata"
+                          onClick={() => void handleOpenChangeRequest(s)}
+                        >
+                          <FileText className="size-3.5 mr-1" />
+                          <span>Biodata</span>
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Balance Alert Box */}
@@ -470,6 +567,196 @@ export default function DashboardPage() {
             spec={dispensationForm}
             close={() => setDispensationForm(null)}
           />
+        )}
+
+        {/* Profile Change Request Modal */}
+        {changeRequestStudent && (
+          <Modal
+            title={`Pengajuan Pembaruan Biodata — ${changeRequestStudent.name}`}
+            close={() => setChangeRequestStudent(null)}
+            className="max-w-2xl"
+          >
+            <div className="space-y-5 text-xs">
+              {/* History Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between font-bold text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <History className="size-3.5" /> Riwayat Pengajuan Perubahan
+                  </span>
+                  <span>{changeRequestsList.length} Pengajuan</span>
+                </div>
+                {loadingRequests ? (
+                  <p className="text-muted-foreground italic py-2">Memuat riwayat pengajuan...</p>
+                ) : changeRequestsList.length === 0 ? (
+                  <p className="text-muted-foreground italic p-3 bg-muted/30 rounded-lg border">
+                    Belum ada riwayat usulan pembaruan biodata santri ini.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {changeRequestsList.map((req) => (
+                      <div
+                        key={req.id}
+                        className="p-3 rounded-lg border bg-card space-y-1.5 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge status={req.status} />
+                            <span className="text-[11px] text-muted-foreground">
+                              {formatDateIndo(req.createdAt)}
+                            </span>
+                          </div>
+                          {req.status === "SUBMITTED" && (
+                            <span className="text-[10px] text-amber-600 font-medium">
+                              Menunggu review TU
+                            </span>
+                          )}
+                        </div>
+                        {req.rejectionReason && (
+                          <div className="p-2 bg-rose-50 border border-rose-200 text-rose-900 rounded text-[11px]">
+                            <strong>Alasan Penolakan:</strong> {req.rejectionReason}
+                          </div>
+                        )}
+                        <div className="text-[11px] text-muted-foreground">
+                          <strong>Data Diubah:</strong>{" "}
+                          {Object.keys(req.patch || {})
+                            .map((k) => `${k}: ${req.patch[k]}`)
+                            .join(", ")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Form Section */}
+              <form onSubmit={handleSubmitChangeRequest} className="space-y-3 pt-3 border-t border-border/60">
+                <div className="font-bold text-foreground flex items-center gap-1.5">
+                  <Send className="size-3.5 text-primary" /> Formulir Usulan Pembaruan
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Perubahan data kontak dan alamat domisili akan diverifikasi oleh staf Tata Usaha sebelum diterapkan ke sistem.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      No. Telepon / WhatsApp
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                      placeholder="Contoh: 081234567890"
+                      value={changeForm.phone}
+                      onChange={(e) => setChangeForm({ ...changeForm, phone: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      Kode Pos
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                      placeholder="Contoh: 16620"
+                      value={changeForm.postalCode}
+                      onChange={(e) => setChangeForm({ ...changeForm, postalCode: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-foreground mb-1">
+                    Alamat Jalan / Lingkungan
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                    placeholder="Nama jalan, nomor rumah, RT/RW..."
+                    value={changeForm.street}
+                    onChange={(e) => setChangeForm({ ...changeForm, street: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">RT</label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                      placeholder="01"
+                      value={changeForm.rt}
+                      onChange={(e) => setChangeForm({ ...changeForm, rt: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">RW</label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                      placeholder="02"
+                      value={changeForm.rw}
+                      onChange={(e) => setChangeForm({ ...changeForm, rw: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">Kelurahan/Desa</label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                      placeholder="Benteng"
+                      value={changeForm.village}
+                      onChange={(e) => setChangeForm({ ...changeForm, village: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">Kecamatan</label>
+                    <input
+                      type="text"
+                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                      placeholder="Ciampea"
+                      value={changeForm.district}
+                      onChange={(e) => setChangeForm({ ...changeForm, district: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-foreground mb-1">
+                    Alasan Perubahan Data <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-background"
+                    placeholder="Contoh: Pindah rumah domisili baru / ganti nomor WA"
+                    value={changeForm.reason}
+                    onChange={(e) => setChangeForm({ ...changeForm, reason: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChangeRequestStudent(null)}
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="default"
+                    size="sm"
+                    disabled={submittingChange}
+                    className="gap-1.5"
+                  >
+                    <Send className="size-3.5" />
+                    <span>{submittingChange ? "Mengirim..." : "Kirim Pengajuan"}</span>
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </Modal>
         )}
       </div>
     );

@@ -52,6 +52,7 @@ import { Badge } from "@/src/components/Badge";
 import { CopyButton } from "@/src/components/CopyButton";
 import { Button } from "@/src/components/ui/button";
 import { ExamCardView } from "@/src/components/cards";
+import { api } from "@/src/lib/api";
 
 type Student = AppState["students"][number];
 type ClassItem = AppState["classes"][number];
@@ -284,24 +285,20 @@ export function StudentDetailView({
   const handleReviewDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!docReviewModal) return;
+    if (reviewStatus === "REJECTED" && !reviewNotes.trim()) {
+      alert("Alasan penolakan dokumen wajib diisi");
+      return;
+    }
     setIsSavingReview(true);
     try {
-      const res = await fetch(`/api/student-documents/${docReviewModal.id}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: reviewStatus,
-          verificationNotes: reviewNotes,
-        }),
+      await api(`student-documents/${docReviewModal.id}/review`, "POST", {
+        status: reviewStatus,
+        rejectionReason: reviewStatus === "REJECTED" ? reviewNotes.trim() : undefined,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Gagal memproses verifikasi dokumen.");
-      }
       setDocReviewModal(null);
       window.location.reload();
     } catch (err: any) {
-      alert(err.message);
+      alert(err.message || "Gagal memproses verifikasi dokumen");
     } finally {
       setIsSavingReview(false);
     }
@@ -1890,11 +1887,11 @@ export function StudentDetailView({
                                   {doc.verificationStatus}
                                 </span>
                               </td>
-                              <td>{doc.verificationNotes || "—"}</td>
+                              <td>{doc.rejectionReason || doc.verificationNotes || "—"}</td>
                               <td className="right">
                                 <div style={{ display: "inline-flex", gap: 6 }}>
                                   <a
-                                    href={`/api/student-documents/${doc.id}/download`}
+                                    href={`/api/student-documents/${doc.id}/content`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="st-btn-secondary"
@@ -2425,10 +2422,10 @@ export function StudentDetailView({
           <form onSubmit={handleReviewDoc} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <p style={{ fontSize: 12, color: "#475569", margin: "0 0 10px" }}>
-                Nama Berkas: <b>{docReviewModal.fileName}</b>
+                Nama Berkas: <b>{docReviewModal.documentName || docReviewModal.originalFilename || docReviewModal.fileName}</b>
               </p>
               <a
-                href={`/api/student-documents/${docReviewModal.id}/download`}
+                href={`/api/student-documents/${docReviewModal.id}/content`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="st-btn-secondary"

@@ -75,6 +75,51 @@ export async function downloadProof(proof: {
   }
   saveFile(new Blob(chunks, { type: proof.mimeType }), proof.filename);
 }
+export async function uploadStudentDocument(
+  file: File,
+  userId: string,
+  studentId: string,
+  docType: string,
+  docName: string,
+) {
+  const extensions: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "application/pdf": "pdf",
+    "image/webp": "webp",
+  };
+  const ext = extensions[file.type];
+  if (!ext || file.size <= 0 || file.size > 5 * 1024 * 1024)
+    throw new Error("Pilih berkas JPG, PNG, PDF, atau WebP maksimal 5 MB");
+  const blob = await upload(
+    `student-documents/${userId}/${crypto.randomUUID()}.${ext}`,
+    file,
+    {
+      access: "private",
+      handleUploadUrl: "/api/files/upload",
+      contentType: file.type,
+    },
+  );
+  return api<any>(`students/${studentId}/documents`, "POST", {
+    documentType: docType,
+    documentName: docName,
+    storagePath: blob.pathname,
+    originalFilename: file.name,
+    mimeType: file.type,
+    fileSize: file.size,
+  });
+}
+export async function downloadStudentDocumentContent(doc: {
+  id: string;
+  originalFilename: string;
+  fileSize?: number;
+  mimeType?: string;
+}) {
+  const response = await fetch(`/api/student-documents/${doc.id}/content`);
+  if (!response.ok) throw new Error("Dokumen tidak dapat diunduh");
+  const blob = await response.blob();
+  saveFile(blob, doc.originalFilename);
+}
 export function saveFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
