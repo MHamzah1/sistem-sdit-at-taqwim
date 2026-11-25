@@ -116,9 +116,9 @@ export default function DispensasiPage() {
       fields: [
         {
           key: "notes",
-          label: "Catatan Pertimbangan / Rekomendasi",
+          label: "Catatan Pertimbangan / Rekomendasi (Minimal 3 karakter)",
           type: "textarea",
-          required: action === "reject",
+          required: true,
         },
       ],
       submit: async (values) => {

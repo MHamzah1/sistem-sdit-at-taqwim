@@ -84,13 +84,17 @@ export default function KelayakanUjianPage() {
 
   const handleEvaluate = async (student: Student) => {
     if (!currentExam) return;
-    await run(
-      () =>
-        api(`exams/${currentExam.id}/eligibility`, "POST", {
-          studentId: student.id,
-        }),
-      `Kelayakan untuk ${student.name} diperbarui`,
-    );
+    try {
+      await run(
+        () =>
+          api(`exams/${currentExam.id}/eligibility`, "POST", {
+            studentId: student.id,
+          }),
+        `Kelayakan untuk ${student.name} diperbarui`,
+      );
+    } catch {
+      // Pesan error ditampilkan oleh AppContext
+    }
   };
 
   const handlePrintCard = async (student: Student) => {
@@ -259,7 +263,7 @@ export default function KelayakanUjianPage() {
               <option value="ALL">Semua Kelayakan</option>
               <option value="ELIGIBLE">Layak (Lunas)</option>
               <option value="ELIGIBLE_DISPENSATION">Layak (Dispensasi)</option>
-              <option value="INELIGIBLE">Belum Layak</option>
+              <option value="NOT_ELIGIBLE">Belum Layak</option>
               <option value="NOT_EVALUATED">Belum Dievaluasi</option>
             </select>
           </div>

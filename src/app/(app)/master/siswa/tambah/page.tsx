@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/src/lib/context/AppContext";
 import { StudentFormView } from "../_components/StudentFormView";
-import { api } from "@/src/lib/api";
+import { api, ApiError } from "@/src/lib/api";
 
 export function normalizeDraftData(data: any) {
   if (!data) return null;
@@ -308,7 +308,10 @@ export default function TambahSiswaPage() {
         setToast("Draf pendaftaran berhasil disimpan sementara");
       }
     } catch (e) {
-      const code = (e as { code?: string })?.code;
+      const code =
+        e instanceof ApiError
+          ? e.code
+          : (e as { code?: string })?.code;
       if (code === "SCHEMA_NOT_READY") {
         const localId = `local-${crypto.randomUUID()}`;
         const raw = localStorage.getItem("taqwim_student_drafts_v1");

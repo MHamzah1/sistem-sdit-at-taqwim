@@ -40,6 +40,41 @@ export function validateSignature(bytes: Uint8Array, mime: string) {
 }
 export async function uploadToken(db: Database, request: Request) {
   const body = (await request.json()) as HandleUploadBody;
+  if (body?.type === "blob.generate-client-token") {
+    csrf(request);
+    const actor = await authenticate(db, request);
+    const pathname = body.payload?.pathname || "";
+    const isProof = pathname.startsWith("proofs/");
+    const isDoc =
+      pathname.startsWith("student-documents/") ||
+      pathname.startsWith("student-photos/");
+    if (isProof) {
+      if (!isGuardian(actor)) allow(actor, "finance");
+      if (
+        !new RegExp(
+          `^proofs/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf)$`,
+        ).test(pathname)
+      )
+        throw new HttpError(422, "Nama file tidak valid");
+    } else if (isDoc) {
+      if (!isGuardian(actor)) allow(actor, "master");
+      if (
+        !new RegExp(
+          `^(student-documents|student-photos)/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf|webp)$`,
+        ).test(pathname)
+      )
+        throw new HttpError(422, "Nama file dokumen tidak valid");
+    } else {
+      throw new HttpError(422, "Kategori penyimpanan tidak valid");
+    }
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      throw new HttpError(
+        503,
+        "Layanan penyimpanan cloud (BLOB_READ_WRITE_TOKEN) belum dikonfigurasi",
+        "CONFIG_ERROR",
+      );
+    }
+  }
   // handleUpload verifies the signed Blob callback; only token generation uses a user session.
   return handleUpload({
     request,
@@ -75,6 +110,7 @@ export async function uploadToken(db: Database, request: Request) {
         )
           throw new HttpError(422, "Nama file tidak valid");
       } else if (isDoc) {
+        if (!isGuardian(actor)) allow(actor, "master");
         if (
           !new RegExp(
             `^(student-documents|student-photos)/${actor.id}/[a-f0-9-]{36}\\.(jpg|jpeg|png|pdf|webp)$`,
@@ -355,22 +391,37 @@ export async function verifyStudentFile(
     throw new HttpError(422, "Path file tidak boleh kosong", "INVALID_FILE_PATH");
   }
 
-  // Bypass physical network call in test environments without Vercel Blob credentials
-  if (
+  const isTestEnvironment =
     process.env.NODE_ENV === "test" ||
-    process.env.VITEST ||
-    !process.env.BLOB_READ_WRITE_TOKEN
-  ) {
-    const extMatch = pathname.match(/\.(jpe?g|png|webp|pdf)$/i);
-    const extMimeMap: Record<string, string> = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      webp: "image/webp",
-      pdf: "application/pdf",
-    };
-    const inferredMime = extMatch ? extMimeMap[extMatch[1].toLowerCase()] : "application/pdf";
-    return { size: 1024, contentType: inferredMime };
+    Boolean(process.env.VITEST) ||
+    Boolean(process.env.NODE_TEST_CONTEXT) ||
+    process.argv.some((a) => a.endsWith(".test.ts")) ||
+    process.execArgv.some((a) => a === "--test");
+
+  // Bypass physical network call only in non-production test environments when Blob token is absent
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    if (
+      isTestEnvironment &&
+      process.env.NODE_ENV !== "production" &&
+      !process.env.VERCEL &&
+      !process.env.VERCEL_ENV
+    ) {
+      const extMatch = pathname.match(/\.(jpe?g|png|webp|pdf)$/i);
+      const extMimeMap: Record<string, string> = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        pdf: "application/pdf",
+      };
+      const inferredMime = extMatch ? extMimeMap[extMatch[1].toLowerCase()] : "application/pdf";
+      return { size: 1024, contentType: inferredMime };
+    }
+    throw new HttpError(
+      503,
+      "Layanan penyimpanan cloud (BLOB_READ_WRITE_TOKEN) belum dikonfigurasi",
+      "CONFIG_ERROR",
+    );
   }
 
   let metadata;

@@ -35,17 +35,18 @@ export default function DetailSiswaPage({
   const [deleteError, setDeleteError] = useState("");
   const [fullProfile, setFullProfile] = useState<any>(null);
 
-  React.useEffect(() => {
-    let active = true;
-    api<any>(`students/${id}/profile`)
-      .then((res) => {
-        if (active) setFullProfile(res);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
+  const loadFullProfile = React.useCallback(async () => {
+    try {
+      const res = await api<any>(`students/${id}/profile`);
+      setFullProfile(res);
+    } catch {
+      // Abaikan jika profil belum siap
+    }
   }, [id]);
+
+  React.useEffect(() => {
+    void loadFullProfile();
+  }, [loadFullProfile]);
 
   if (loading || !state) {
     return (
@@ -158,6 +159,7 @@ export default function DetailSiswaPage({
         dispensations={state.dispensations}
         eligibilities={state.eligibilities}
         exams={state.exams}
+        examCards={state.examCards}
         guardians={state.guardians}
         guardianStudents={state.guardianStudents}
         canMaster={can("master")}
@@ -169,6 +171,10 @@ export default function DetailSiswaPage({
         onConnectGuardian={() => setShowConnectModal(true)}
         onDisconnectGuardian={handleDisconnectGuardian}
         onPrintCard={handlePrintCard}
+        onProfileReload={async () => {
+          await loadFullProfile();
+          await refresh();
+        }}
       />
 
       {/* Delete Confirmation Modal */}

@@ -175,12 +175,12 @@ export default function PembayaranPage() {
                               key={proof.id}
                               type="button"
                               className="st-btn-action detail"
-                              onClick={() =>
+                              onClick={() => {
                                 void run(
                                   () => downloadProof(proof),
                                   "Bukti transfer sedang diunduh",
-                                )
-                              }
+                                ).catch(() => {});
+                              }}
                               title="Unduh Bukti Transfer"
                             >
                               <Download size={14} />
@@ -217,7 +217,11 @@ export default function PembayaranPage() {
           initialStudent={state.students[0]?.id || ""}
           close={() => setPaymentModalOpen(false)}
           saved={async () => {
-            await run(async () => {}, "Pembayaran tersimpan");
+            try {
+              await run(async () => {}, "Pembayaran tersimpan");
+            } catch {
+              // Error ditangani di AppContext
+            }
           }}
         />
       )}

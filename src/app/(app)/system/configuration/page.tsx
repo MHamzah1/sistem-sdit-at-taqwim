@@ -816,7 +816,7 @@ export default function SystemConfigurationPage() {
                     <h4>Format Kuitansi Kasir</h4>
                   </div>
                   <div className="st-summary-box__content">
-                    <strong style={{ fontFamily: "monospace" }}>KW-YYYYMM-XXXX</strong>
+                    <strong style={{ fontFamily: "monospace" }}>KW-YYYYMMDD-XXXXXX</strong>
                     <small style={{ color: "#798a80", fontSize: 11 }}>
                       Dihasilkan otomatis saat pembayaran diverifikasi
                     </small>
@@ -1290,7 +1290,7 @@ export default function SystemConfigurationPage() {
                     <h4>Framework & Runtime</h4>
                   </div>
                   <div className="st-summary-box__content">
-                    <strong>Next.js 15 · React 19</strong>
+                    <strong>Next.js 16 · React 19</strong>
                     <small style={{ color: "#798a80", fontSize: 11 }}>
                       Serverless Node.js Environment
                     </small>
@@ -1367,9 +1367,9 @@ export default function SystemConfigurationPage() {
                     1. Evaluasi 3 Syarat Kelayakan Ujian
                   </strong>
                   <p style={{ margin: 0, fontSize: 11.5, color: "#5c6c63", lineHeight: 1.45 }}>
-                    Siswa berstatus <code>ELIGIBLE</code> hanya jika: (a) SPP lunas s/d bulan ujian,
-                    (b) bebas tunggakan tahun ajaran lampau, dan (c) formulir karakteristik telah diisi
-                    100%.
+                    Siswa berstatus <code>ELIGIBLE</code> jika: (a) seluruh invoice wajib s/d bulan
+                    ujian berstatus lunas, dan (b) bebas tunggakan tahun ajaran sebelumnya; atau (c)
+                    memiliki dispensasi resmi yang disetujui Kepala Sekolah (<code>ELIGIBLE_DISPENSATION</code>).
                   </p>
                 </div>
 

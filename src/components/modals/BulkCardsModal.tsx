@@ -106,7 +106,10 @@ export function BulkCardsModal({
               </label>
               <Select
                 value={selectedExamId}
-                onChange={(e) => setSelectedExamId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedExamId(e.target.value);
+                  setSelectedClassId("");
+                }}
                 className="w-full min-w-0"
               >
                 {data.exams.map((ex) => (
@@ -126,11 +129,13 @@ export function BulkCardsModal({
                 className="w-full min-w-0"
               >
                 <option value="">Semua Kelas</option>
-                {data.classes.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name}
-                  </option>
-                ))}
+                {data.classes
+                  .filter((cls) => !examObj || cls.academicYearId === examObj.academicYearId)
+                  .map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
               </Select>
             </div>
             <div>

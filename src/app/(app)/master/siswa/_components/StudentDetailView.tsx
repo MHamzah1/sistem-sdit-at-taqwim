@@ -64,6 +64,62 @@ type ExamEligibility = AppState["eligibilities"][number];
 type ExamPeriod = AppState["exams"][number];
 type Guardian = AppState["guardians"][number];
 type GuardianStudent = AppState["guardianStudents"][number];
+type ExamCard = AppState["examCards"][number];
+
+const STUDENT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Aktif",
+  INACTIVE: "Non-Aktif",
+  TRANSFERRED: "Pindah Sekolah",
+  WITHDRAWN: "Mengundurkan Diri",
+  GRADUATED: "Lulus",
+};
+
+const RESIDENCE_LABELS: Record<string, string> = {
+  BERSAMA_ORANG_TUA: "Bersama Orang Tua",
+  BERSAMA_WALI: "Bersama Wali",
+  KOS_ASRAMA: "Kost / Asrama",
+  PANTI_ASUHAN: "Panti Asuhan",
+  LAINNYA: "Lainnya",
+};
+
+const TRANSPORT_LABELS: Record<string, string> = {
+  JALAN_KAKI: "Jalan Kaki",
+  SEPEDA: "Sepeda",
+  SEPEDA_MOTOR: "Sepeda Motor",
+  MOBIL_PRIBADI: "Mobil Pribadi",
+  ANTAR_JEMPUT: "Antar Jemput Sekolah",
+  ANGKUTAN_UMUM: "Angkutan Umum",
+  WALK: "Jalan Kaki",
+  BICYCLE: "Sepeda",
+  MOTORCYCLE: "Sepeda Motor",
+};
+
+const INCOME_LABELS: Record<string, string> = {
+  TIDAK_BERPENGHASILAN: "Tidak Berpenghasilan",
+  KURANG_DARI_500RB: "< Rp500.000",
+  RP_500RB_SD_1_JT: "Rp500.000 – Rp1.000.000",
+  RP_1_JT_SD_2_JT: "Rp1.000.000 – Rp2.000.000",
+  RP_2_JT_SD_5_JT: "Rp2.000.000 – Rp5.000.000",
+  RP_5_JT_SD_20_JT: "Rp5.000.000 – Rp20.000.000",
+  LEBIH_DARI_20_JT: "> Rp20.000.000",
+  TIDAK_DIKETAHUI: "Tidak Diketahui",
+};
+
+const FAMILY_ROLE_LABELS: Record<string, string> = {
+  FATHER: "Ayah Kandung",
+  MOTHER: "Ibu Kandung",
+  GRANDFATHER: "Kakek",
+  GRANDMOTHER: "Nenek",
+  UNCLE: "Paman",
+  AUNT: "Bibi",
+  OTHER_GUARDIAN: "Wali Siswa",
+};
+
+const DOC_STATUS_LABELS: Record<string, string> = {
+  VERIFIED: "Terverifikasi",
+  REJECTED: "Ditolak",
+  PENDING: "Menunggu Verifikasi",
+};
 
 interface StudentDetailViewProps {
   student: Student;
@@ -75,6 +131,7 @@ interface StudentDetailViewProps {
   dispensations: Dispensation[];
   eligibilities: ExamEligibility[];
   exams: ExamPeriod[];
+  examCards?: ExamCard[];
   guardians: Guardian[];
   guardianStudents: GuardianStudent[];
   canMaster: boolean;
@@ -86,6 +143,7 @@ interface StudentDetailViewProps {
   onConnectGuardian: () => void;
   onDisconnectGuardian: (guardianId: string) => void;
   onPrintCard: (student: Student) => void;
+  onProfileReload?: () => Promise<void>;
 }
 
 type TabType =
@@ -110,6 +168,7 @@ export function StudentDetailView({
   dispensations,
   eligibilities,
   exams,
+  examCards = [],
   guardians,
   guardianStudents,
   canMaster,
@@ -121,6 +180,7 @@ export function StudentDetailView({
   onConnectGuardian,
   onDisconnectGuardian,
   onPrintCard,
+  onProfileReload,
 }: StudentDetailViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("ringkasan");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
@@ -134,7 +194,7 @@ export function StudentDetailView({
     heightCm: "",
     weightKg: "",
     headCircumferenceCm: "",
-    semester: "SEMESTER_1",
+    semester: "1",
     notes: "",
   });
   const [isSavingMeasurement, setIsSavingMeasurement] = useState(false);
@@ -197,6 +257,9 @@ export function StudentDetailView({
   const examDispensation = dispensations.find(
     (d) => d.studentId === student.id && d.examPeriodId === activeExam?.id,
   );
+  const studentExamCard = examCards.find(
+    (c) => c.studentId === student.id && c.examPeriodId === activeExam?.id,
+  );
 
   const linkedGuardianIds = guardianStudents
     .filter((gs) => gs.studentId === student.id)
@@ -206,14 +269,16 @@ export function StudentDetailView({
   );
 
   useEffect(() => {
-    const code = student.id;
-    if (typeof window !== "undefined") {
+    const code = studentExamCard?.verificationCode;
+    if (code && typeof window !== "undefined") {
       const url = `${window.location.origin}/ujian/kartu?code=${code}`;
       QRCode.toDataURL(url, { width: 140, margin: 1 })
         .then(setQrCodeUrl)
         .catch(() => {});
+    } else {
+      setQrCodeUrl("");
     }
-  }, [student.id]);
+  }, [studentExamCard?.verificationCode]);
 
   const participantNum =
     activeExam && studentClass
@@ -252,7 +317,11 @@ export function StudentDetailView({
         throw new Error(err.error || "Gagal menyimpan data pengukuran.");
       }
       setShowAddMeasurementModal(false);
-      window.location.reload();
+      if (onProfileReload) {
+        await onProfileReload();
+      } else {
+        window.location.reload();
+      }
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -284,7 +353,11 @@ export function StudentDetailView({
         throw new Error(err.error || "Gagal menyimpan data bantuan.");
       }
       setShowAddAidModal(false);
-      window.location.reload();
+      if (onProfileReload) {
+        await onProfileReload();
+      } else {
+        window.location.reload();
+      }
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -306,7 +379,11 @@ export function StudentDetailView({
         rejectionReason: reviewStatus === "REJECTED" ? reviewNotes.trim() : undefined,
       });
       setDocReviewModal(null);
-      window.location.reload();
+      if (onProfileReload) {
+        await onProfileReload();
+      } else {
+        window.location.reload();
+      }
     } catch (err: any) {
       alert(err.message || "Gagal memproses verifikasi dokumen");
     } finally {
@@ -530,7 +607,7 @@ export function StudentDetailView({
               ) : (
                 <span
                   className="st-idcard__value"
-                  style={{ color: "var(--muted)" }}
+                  style={{ color: "var(--muted-foreground)" }}
                 >
                   —
                 </span>
@@ -614,7 +691,7 @@ export function StudentDetailView({
                 <strong style={{ fontSize: 14 }}>
                   Tingkat Kelengkapan Berkas & Biodata Siswa: {completeness.overallPercent}%
                 </strong>
-                <p style={{ margin: 0, fontSize: 11, color: "var(--muted)" }}>
+                <p style={{ margin: 0, fontSize: 11, color: "var(--muted-foreground)" }}>
                   {completeness.overallPercent === 100
                     ? "Seluruh komponen identitas, orang tua, dan dokumen fisik telah lengkap diverifikasi."
                     : `Terdapat ${completeness.missingFields?.length || 0} kolom atau berkas yang belum dilengkapi.`}
@@ -664,24 +741,47 @@ export function StudentDetailView({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(175px, 1fr))",
+              gap: 10,
               fontSize: 11,
               color: "#475569",
             }}
           >
-            <div>
-              <span>Profil Dasar:</span> <b>{completeness.sections?.profile || 0}%</b>
-            </div>
-            <div>
-              <span>Alamat Lengkap:</span> <b>{completeness.sections?.address || 0}%</b>
-            </div>
-            <div>
-              <span>Orang Tua/Wali:</span> <b>{completeness.sections?.parents || 0}%</b>
-            </div>
-            <div>
-              <span>Dokumen Fisik:</span> <b>{completeness.sections?.documents || 0}%</b>
-            </div>
+            {[
+              { key: "identitas", label: "Identitas" },
+              { key: "alamat", label: "Alamat" },
+              { key: "registrasi", label: "Registrasi" },
+              { key: "ayah", label: "Data Ayah" },
+              { key: "ibu", label: "Data Ibu" },
+              { key: "wali_darurat", label: "Kontak Darurat" },
+              { key: "kesehatan", label: "Kesehatan" },
+              { key: "bantuan", label: "Bantuan" },
+              { key: "karakteristik", label: "Karakteristik" },
+              { key: "dokumen", label: "Dokumen" },
+            ].map((sec) => {
+              const secData = completeness.sections?.[sec.key];
+              const isOk = secData?.status === "COMPLETE";
+              return (
+                <div
+                  key={sec.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 6,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    background: isOk ? "#ecfdf5" : "#fffbeb",
+                    border: `1px solid ${isOk ? "#a7f3d0" : "#fde68a"}`,
+                  }}
+                >
+                  <span>{sec.label}:</span>
+                  <b style={{ color: isOk ? "#16613e" : "#b45309" }}>
+                    {isOk ? "Lengkap" : "Belum"}
+                  </b>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -992,7 +1092,7 @@ export function StudentDetailView({
                             status={examEligibility?.status || "NOT_EVALUATED"}
                           />
                         </div>
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                        <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
                           {examEligibility?.reason ||
                             "Belum dievaluasi untuk periode ini"}
                         </span>
@@ -1019,7 +1119,7 @@ export function StudentDetailView({
                           />
                           Kontak Orang Tua / Wali Murid
                         </h4>
-                        <small style={{ color: "var(--muted)" }}>
+                        <small style={{ color: "var(--muted-foreground)" }}>
                           {connectedGuardians.length > 0
                             ? `${connectedGuardians.length} kontak terhubung`
                             : "Belum ada kontak wali yang terhubung"}
@@ -1135,64 +1235,67 @@ export function StudentDetailView({
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nama Lengkap</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Nama Lengkap</span>
                       <strong>{student.name}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nama Panggilan</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Nama Panggilan</span>
                       <strong>{studentExtended.nickname || "—"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nomor Induk Siswa (NIS)</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Nomor Induk Siswa (NIS)</span>
                       <strong>{student.nis}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>NISN</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>NISN</span>
                       <strong>{student.nisn || "—"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>NIK Siswa</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>NIK Siswa</span>
                       <strong>{maskNik(studentExtended.nik)}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nomor Kartu Keluarga (KK)</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Nomor Kartu Keluarga (KK)</span>
                       <strong>{maskNik(studentExtended.familyCardNumber)}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>No. Registrasi Akta Lahir</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>No. Registrasi Akta Lahir</span>
                       <strong>{studentExtended.birthCertificateNumber || "—"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Tempat, Tanggal Lahir</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Tempat, Tanggal Lahir</span>
                       <strong>
                         {student.birthPlace || "—"}, {formatDateIndo(student.birthDate)} ({calculateAge(student.birthDate)})
                       </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jenis Kelamin</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Jenis Kelamin</span>
                       <strong>{student.gender === "L" ? "Laki-laki" : student.gender === "P" ? "Perempuan" : "—"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Agama</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Agama</span>
                       <strong>{studentExtended.religion || "Islam"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kewarganegaraan</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Kewarganegaraan</span>
                       <strong>{studentExtended.citizenship || "WNI"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Anak Ke / Dari Bersaudara</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Anak Ke / Dari Bersaudara</span>
                       <strong>
                         Anak ke-{studentExtended.birthOrder || "—"} dari {studentExtended.siblingCount || "—"} bersaudara
                       </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Bahasa Sehari-hari</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Bahasa Sehari-hari</span>
                       <strong>{studentExtended.dailyLanguage || "Bahasa Indonesia"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Status Siswa</span>
-                      <span className="st-badge st-badge-green">{studentExtended.studentStatus || "AKTIF"}</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Status Siswa</span>
+                      <span className={`st-badge ${student.active ? "st-badge-green" : "st-badge-slate"}`}>
+                        {STUDENT_STATUS_LABELS[studentExtended.studentStatus] ||
+                          (student.active ? "Aktif" : "Non-Aktif")}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1218,46 +1321,46 @@ export function StudentDetailView({
                     {kkAddress ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jalan / Alamat</span>
-                          <strong>{kkAddress.street || "—"}</strong>
+                          <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Jalan / Alamat</span>
+                          <strong>{kkAddress.address || kkAddress.street || "—"}</strong>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>RT / RW</span>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>RT / RW</span>
                             <strong>RT {kkAddress.rt || "—"} / RW {kkAddress.rw || "—"}</strong>
                           </div>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Dusun / Kampung</span>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Dusun / Kampung</span>
                             <strong>{kkAddress.hamlet || "—"}</strong>
                           </div>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kelurahan / Desa</span>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Kelurahan / Desa</span>
                             <strong>{kkAddress.village || "—"}</strong>
                           </div>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kecamatan</span>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Kecamatan</span>
                             <strong>{kkAddress.district || "—"}</strong>
                           </div>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kabupaten / Kota</span>
-                            <strong>{kkAddress.city || "—"}</strong>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Kabupaten / Kota</span>
+                            <strong>{kkAddress.regency || kkAddress.city || "—"}</strong>
                           </div>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Provinsi</span>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Provinsi</span>
                             <strong>{kkAddress.province || "—"}</strong>
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kode Pos</span>
+                          <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Kode Pos</span>
                           <strong>{kkAddress.postalCode || "—"}</strong>
                         </div>
                       </div>
                     ) : (
-                      <p style={{ color: "var(--muted)", fontSize: 12 }}>Belum ada data alamat Kartu Keluarga.</p>
+                      <p style={{ color: "var(--muted-foreground)", fontSize: 12 }}>Belum ada data alamat Kartu Keluarga.</p>
                     )}
                   </div>
                 </div>
@@ -1274,30 +1377,53 @@ export function StudentDetailView({
                     {domAddress ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Status Tempat Tinggal</span>
-                          <strong>{domAddress.livingWith || "Bersama Orang Tua"}</strong>
+                          <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Status Tempat Tinggal</span>
+                          <strong>
+                            {RESIDENCE_LABELS[domAddress.residenceType || kkAddress?.residenceType] ||
+                              domAddress.residenceType ||
+                              domAddress.livingWith ||
+                              "—"}
+                          </strong>
                         </div>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Alamat Tinggal</span>
-                          <strong>{domAddress.street || "Sama dengan KK"}</strong>
+                          <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Alamat Tinggal</span>
+                          <strong>
+                            {domAddress.address ||
+                              domAddress.street ||
+                              kkAddress?.address ||
+                              "Sama dengan KK"}
+                          </strong>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jarak ke Sekolah</span>
-                            <strong>{domAddress.distanceKm ? `${domAddress.distanceKm} km` : "—"}</strong>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Jarak ke Sekolah</span>
+                            <strong>
+                              {domAddress.distanceToSchool ?? kkAddress?.distanceToSchool ?? domAddress.distanceKm
+                                ? `${domAddress.distanceToSchool ?? kkAddress?.distanceToSchool ?? domAddress.distanceKm} km`
+                                : "—"}
+                            </strong>
                           </div>
                           <div>
-                            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Waktu Tempuh</span>
-                            <strong>{domAddress.travelTimeMinutes ? `${domAddress.travelTimeMinutes} menit` : "—"}</strong>
+                            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Waktu Tempuh</span>
+                            <strong>
+                              {domAddress.travelTimeMinutes ?? kkAddress?.travelTimeMinutes
+                                ? `${domAddress.travelTimeMinutes ?? kkAddress?.travelTimeMinutes} menit`
+                                : "—"}
+                            </strong>
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Moda Transportasi</span>
-                          <strong>{domAddress.transportMode || "Sepeda Motor / Antar Jemput"}</strong>
+                          <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Moda Transportasi</span>
+                          <strong>
+                            {TRANSPORT_LABELS[domAddress.transportationType || kkAddress?.transportationType] ||
+                              domAddress.transportationType ||
+                              domAddress.transportMode ||
+                              "—"}
+                          </strong>
                         </div>
                       </div>
                     ) : (
-                      <p style={{ color: "var(--muted)", fontSize: 12 }}>Belum ada data domisili.</p>
+                      <p style={{ color: "var(--muted-foreground)", fontSize: 12 }}>Belum ada data domisili.</p>
                     )}
                   </div>
                 </div>
@@ -1325,31 +1451,43 @@ export function StudentDetailView({
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nomor Registrasi / Pendaftaran</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Nomor Registrasi / Pendaftaran</span>
                       <strong>{enrollments[0]?.registrationNumber || "—"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Tanggal Masuk / Terdaftar</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Tanggal Masuk / Terdaftar</span>
                       <strong>{formatDateIndo(student.enrolledOn)}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Jenis Pendaftaran</span>
-                      <span className="st-pill-green">{enrollments[0]?.enrollmentType || "SISWA_BARU"}</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Jenis Pendaftaran</span>
+                      <span className="st-pill-green">
+                        {enrollments[0]?.registrationType === "TRANSFER_STUDENT"
+                          ? "Siswa Pindahan"
+                          : enrollments[0]?.registrationType === "NEW_STUDENT"
+                            ? "Siswa Baru"
+                            : enrollments[0]?.enrollmentType || "Siswa Baru"}
+                      </span>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Masuk di Tingkat / Kelas</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Masuk di Tingkat / Kelas</span>
                       <strong>Kelas {enrollments[0]?.entryGrade || "1"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Pernah PAUD / TK</span>
-                      <strong>{enrollments[0]?.hasAttendedPaud ? "Ya, Pernah" : "Tidak"}</strong>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Pernah PAUD / TK</span>
+                      <strong>
+                        {(enrollments[0]?.attendedPaud ?? enrollments[0]?.hasAttendedPaud) === true
+                          ? "Ya, Pernah"
+                          : (enrollments[0]?.attendedPaud ?? enrollments[0]?.hasAttendedPaud) === false
+                            ? "Tidak"
+                            : "—"}
+                      </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Nama Sekolah Asal</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Nama Sekolah Asal</span>
                       <strong>{enrollments[0]?.previousSchoolName || "—"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>NPSN Sekolah Asal</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>NPSN Sekolah Asal</span>
                       <strong>{enrollments[0]?.previousSchoolNpsn || "—"}</strong>
                     </div>
                   </div>
@@ -1421,7 +1559,7 @@ export function StudentDetailView({
                 </div>
                 <div className="st-section-card__body">
                   {family.length === 0 ? (
-                    <p style={{ color: "var(--muted)", fontSize: 12 }}>
+                    <p style={{ color: "var(--muted-foreground)", fontSize: 12 }}>
                       Belum ada data anggota keluarga yang tercatat. Silakan lengkapi melalui formulir ubah data siswa.
                     </p>
                   ) : (
@@ -1436,11 +1574,10 @@ export function StudentDetailView({
                         const m = item.member;
                         const r = item.relation;
                         const roleLabel =
-                          r.relationshipType === "FATHER"
-                            ? "Ayah Kandung"
-                            : r.relationshipType === "MOTHER"
-                            ? "Ibu Kandung"
-                            : "Wali Siswa";
+                          FAMILY_ROLE_LABELS[r.relationshipType] ||
+                          r.relationshipType ||
+                          "Wali Siswa";
+                        const incomeKey = m.monthlyIncomeRange || m.monthlyIncome;
                         return (
                           <div
                             key={idx}
@@ -1472,30 +1609,30 @@ export function StudentDetailView({
 
                             <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
                               <div>
-                                <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Nama Lengkap:</span>
+                                <span style={{ color: "var(--muted-foreground)", fontSize: 11, display: "block" }}>Nama Lengkap:</span>
                                 <strong>{m.fullName}</strong>
                               </div>
                               <div>
-                                <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>NIK:</span>
+                                <span style={{ color: "var(--muted-foreground)", fontSize: 11, display: "block" }}>NIK:</span>
                                 <strong>{maskNik(m.nik)}</strong>
                               </div>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                                 <div>
-                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Pendidikan:</span>
+                                  <span style={{ color: "var(--muted-foreground)", fontSize: 11, display: "block" }}>Pendidikan:</span>
                                   <span>{m.education || "—"}</span>
                                 </div>
                                 <div>
-                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Pekerjaan:</span>
+                                  <span style={{ color: "var(--muted-foreground)", fontSize: 11, display: "block" }}>Pekerjaan:</span>
                                   <span>{m.occupation || "—"}</span>
                                 </div>
                               </div>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                                 <div>
-                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Penghasilan:</span>
-                                  <span>{m.monthlyIncome || "—"}</span>
+                                  <span style={{ color: "var(--muted-foreground)", fontSize: 11, display: "block" }}>Penghasilan:</span>
+                                  <span>{(incomeKey && INCOME_LABELS[incomeKey]) || incomeKey || "—"}</span>
                                 </div>
                                 <div>
-                                  <span style={{ color: "var(--muted)", fontSize: 11, display: "block" }}>Telepon/WA:</span>
+                                  <span style={{ color: "var(--muted-foreground)", fontSize: 11, display: "block" }}>Telepon/WA:</span>
                                   <strong>{m.phone || "—"}</strong>
                                 </div>
                               </div>
@@ -1563,7 +1700,7 @@ export function StudentDetailView({
                           <div className="st-wali-card__top">
                             <div>
                               <strong style={{ fontSize: 13, display: "block" }}>{g.name}</strong>
-                              <small style={{ color: "var(--muted)" }}>
+                              <small style={{ color: "var(--muted-foreground)" }}>
                                 {idx === 0 ? "Kontak Wali Utama" : "Kontak Wali Kedua"}
                               </small>
                             </div>
@@ -1638,31 +1775,51 @@ export function StudentDetailView({
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Golongan Darah</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Golongan Darah</span>
                       <strong style={{ fontSize: 16 }}>{health?.bloodType || "Tidak Diketahui"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Tinggi & Berat Saat Masuk</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Tinggi & Berat Terbaru</span>
                       <strong>
-                        {health?.heightCm ? `${health.heightCm} cm` : "—"} /{" "}
-                        {health?.weightKg ? `${health.weightKg} kg` : "—"}
+                        {measurements[0]?.heightCm ? `${measurements[0].heightCm} cm` : "—"} /{" "}
+                        {measurements[0]?.weightKg ? `${measurements[0].weightKg} kg` : "—"}
                       </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Riwayat Penyakit</span>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Riwayat Penyakit</span>
                       <strong>{health?.medicalHistory || "Tidak Ada"}</strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Alergi Makanan / Obat</span>
-                      <strong>{health?.allergies || "Tidak Ada Alergi"}</strong>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Alergi Makanan / Obat</span>
+                      <strong>
+                        {[
+                          health?.foodAllergies && `Makanan: ${health.foodAllergies}`,
+                          health?.drugAllergies && `Obat: ${health.drugAllergies}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ") ||
+                          health?.allergies ||
+                          "Tidak Ada Alergi"}
+                      </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Kebutuhan Khusus (Disabilitas)</span>
-                      <strong>{health?.specialNeeds || "Tidak Ada"}</strong>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Kebutuhan Khusus (Disabilitas)</span>
+                      <strong>
+                        {health?.hasSpecialNeeds
+                          ? (Array.isArray(health.specialNeedsTypes) && health.specialNeedsTypes.length > 0
+                              ? health.specialNeedsTypes.join(", ")
+                              : health?.assistanceNeeds || "Ada Kebutuhan Khusus")
+                          : health?.specialNeeds || "Tidak Ada"}
+                      </strong>
                     </div>
                     <div>
-                      <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Catatan Darurat / UKS</span>
-                      <strong>{health?.emergencyNotes || "—"}</strong>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Catatan Darurat / Pengobatan Rutin</span>
+                      <strong>
+                        {health?.emergencyHandlingNotes ||
+                          health?.routineMedication ||
+                          health?.emergencyNotes ||
+                          "—"}
+                      </strong>
                     </div>
                   </div>
                 </div>
@@ -1689,7 +1846,7 @@ export function StudentDetailView({
                 </div>
                 <div className="st-section-card__body">
                   {measurements.length === 0 ? (
-                    <p style={{ color: "var(--muted)", fontSize: 12 }}>
+                    <p style={{ color: "var(--muted-foreground)", fontSize: 12 }}>
                       Belum ada riwayat pengukuran fisik periodik untuk santri ini.
                     </p>
                   ) : (
@@ -1713,7 +1870,9 @@ export function StudentDetailView({
                               </td>
                               <td>
                                 <span className="st-pill-green">
-                                  {m.semester === "SEMESTER_1" ? "Semester Ganjil" : "Semester Genap"}
+                                  {Number(m.semester) === 1 || m.semester === "SEMESTER_1"
+                                    ? "Semester Ganjil"
+                                    : "Semester Genap"}
                                 </span>
                               </td>
                               <td>{m.heightCm} cm</td>
@@ -1754,7 +1913,7 @@ export function StudentDetailView({
                 </div>
                 <div className="st-section-card__body">
                   {aidRecords.length === 0 ? (
-                    <p style={{ color: "var(--muted)", fontSize: 12 }}>
+                    <p style={{ color: "var(--muted-foreground)", fontSize: 12 }}>
                       Belum ada data bantuan pendidikan atau beasiswa yang terdaftar.
                     </p>
                   ) : (
@@ -1823,11 +1982,19 @@ export function StudentDetailView({
                   >
                     <BookOpen size={32} style={{ margin: "0 auto 10px", color: "var(--primary)" }} />
                     <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>Lembar Karakteristik Santri</h4>
-                    <p style={{ margin: "0 auto 16px", maxWidth: 480, fontSize: 12, color: "var(--muted)" }}>
+                    <p style={{ margin: "0 auto 16px", maxWidth: 480, fontSize: 12, color: "var(--muted-foreground)" }}>
                       Modul pemetaan karakteristik meliputi minat bakat seni/olahraga/tahfidz, kemandirian santri,
                       dan catatan bimbingan konseling terintegrasi dengan rapor karakter SDIT AT-TAQWIM.
                     </p>
-                    <span className="st-badge st-badge-green">Aktif Terhubung ke Rapor Santri</span>
+                    {profile?.characteristic?.status === "FILLED" ? (
+                      <span className="st-badge st-badge-green">
+                        ✓ Kuesioner Sudah Diisi ({formatDateTimeIndo(profile.characteristic.submittedAt)})
+                      </span>
+                    ) : (
+                      <span className="st-badge st-badge-amber">
+                        Belum Diisi — Silakan lengkapi melalui menu Karakteristik Anak
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1880,7 +2047,7 @@ export function StudentDetailView({
                               <td>
                                 <strong>{doc.documentType}</strong>
                               </td>
-                              <td>{doc.fileName}</td>
+                              <td>{doc.documentName || doc.originalFilename || doc.fileName || "—"}</td>
                               <td>
                                 {doc.fileSize ? `${Math.round(doc.fileSize / 1024)} KB` : "—"}
                               </td>
@@ -1894,7 +2061,7 @@ export function StudentDetailView({
                                       : "st-badge-slate"
                                   }`}
                                 >
-                                  {doc.verificationStatus}
+                                  {DOC_STATUS_LABELS[doc.verificationStatus] || doc.verificationStatus}
                                 </span>
                               </td>
                               <td>{doc.rejectionReason || doc.verificationNotes || "—"}</td>
@@ -1915,8 +2082,8 @@ export function StudentDetailView({
                                       className="outline tiny"
                                       onClick={() => {
                                         setDocReviewModal(doc);
-                                        setReviewStatus(doc.verificationStatus || "VERIFIED");
-                                        setReviewNotes(doc.verificationNotes || "");
+                                        setReviewStatus(doc.verificationStatus === "REJECTED" ? "REJECTED" : "VERIFIED");
+                                        setReviewNotes(doc.rejectionReason || doc.verificationNotes || "");
                                       }}
                                     >
                                       <FileCheck size={12} /> Review
@@ -2302,8 +2469,8 @@ export function StudentDetailView({
                 onChange={(e) => setMeasurementForm({ ...measurementForm, semester: e.target.value })}
                 className="st-input"
               >
-                <option value="SEMESTER_1">Semester 1 (Ganjil)</option>
-                <option value="SEMESTER_2">Semester 2 (Genap)</option>
+                <option value="1">Semester 1 (Ganjil)</option>
+                <option value="2">Semester 2 (Genap)</option>
               </select>
             </div>
             <div>
@@ -2353,8 +2520,11 @@ export function StudentDetailView({
                 <option value="PIP">Program Indonesia Pintar (PIP)</option>
                 <option value="KIP">Kartu Indonesia Pintar (KIP)</option>
                 <option value="PKH">Program Keluarga Harapan (PKH)</option>
+                <option value="KKS">Kartu Keluarga Sejahtera (KKS)</option>
+                <option value="KPS">Kartu Perlindungan Sosial (KPS)</option>
                 <option value="BEASISWA_INTERNAL">Beasiswa Yayasan SDIT At-Taqwim</option>
-                <option value="BEASISWA_LAIN">Beasiswa Lainnya</option>
+                <option value="BEASISWA_EKSTERNAL">Beasiswa Eksternal</option>
+                <option value="OTHER">Bantuan / Beasiswa Lainnya</option>
               </select>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
@@ -2583,7 +2753,7 @@ export function StudentDetailView({
                     <td style={{ padding: "4px 0", verticalAlign: "top" }}>Alamat Lengkap KK</td>
                     <td style={{ padding: "4px 0", verticalAlign: "top" }}>:</td>
                     <td>
-                      {kkAddress ? `${kkAddress.street || ""}, RT ${kkAddress.rt || "—"}/RW ${kkAddress.rw || "—"}, Desa ${kkAddress.village || "—"}, Kec. ${kkAddress.district || "—"}, ${kkAddress.city || "—"}` : "—"}
+                      {kkAddress ? `${kkAddress.address || kkAddress.street || ""}, RT ${kkAddress.rt || "—"}/RW ${kkAddress.rw || "—"}, Desa ${kkAddress.village || "—"}, Kec. ${kkAddress.district || "—"}, ${kkAddress.regency || kkAddress.city || "—"}` : "—"}
                     </td>
                   </tr>
                   <tr>

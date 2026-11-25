@@ -365,14 +365,9 @@ export const periodicMeasurementSchema = z
 export const studentDocumentItemSchema = z.object({
   id: uuid.optional(),
   documentType: z.enum([
-    "KK",
-    "AKTA_KELAHIRAN",
-    "KTP_AYAH",
-    "KTP_IBU",
+    ...DOCUMENT_TYPES,
     "IJAZAH_SEBELUMNYA",
     "KIP_PIP",
-    "PAS_FOTO",
-    "SURAT_PINDAH",
     "OTHER",
   ]),
   documentName: z.string().trim().min(1, "Nama dokumen wajib diisi").max(150),
@@ -1330,7 +1325,18 @@ export async function updateStudentProfile(
         isPrimary: boolean,
         isPayment: boolean,
       ) => {
-        if (!entry || entry.mode === "none") return;
+        if (!entry) return;
+        if (entry.mode === "none") {
+          await tx
+            .delete(s.studentFamilyMembers)
+            .where(
+              and(
+                eq(s.studentFamilyMembers.studentId, studentId),
+                eq(s.studentFamilyMembers.relationshipType, relType),
+              ),
+            );
+          return;
+        }
         let memberId = entry.familyMemberId;
         let memberName = "";
         let memberPhone = "";
@@ -1376,6 +1382,15 @@ export async function updateStudentProfile(
             .where(eq(s.familyMembers.id, memberId));
           memberName = entry.data.fullName;
           memberPhone = entry.data.phone || "";
+        } else if (memberId) {
+          const [existingMem] = await tx
+            .select()
+            .from(s.familyMembers)
+            .where(eq(s.familyMembers.id, memberId));
+          if (existingMem) {
+            memberName = existingMem.fullName;
+            memberPhone = existingMem.phone || "";
+          }
         }
 
         if (memberId) {
@@ -1640,6 +1655,59 @@ export async function updateStudentProfile(
       }
     }
 
+    // 8. Register newly added documents if provided (idempotent against existing storagePath)
+    if (input.documents && input.documents.length > 0) {
+      const existingDocs = await tx
+        .select({ id: s.studentDocuments.id, storagePath: s.studentDocuments.storagePath })
+        .from(s.studentDocuments)
+        .where(eq(s.studentDocuments.studentId, studentId));
+      const existingPaths = new Set(existingDocs.map((doc) => doc.storagePath));
+      const existingIds = new Set(existingDocs.map((doc) => doc.id));
+
+      for (const d of input.documents) {
+        if (!d.storagePath) continue;
+        if ((d.id && existingIds.has(d.id)) || existingPaths.has(d.storagePath)) {
+          continue;
+        }
+        if (
+          d.storagePath.startsWith("staging/") ||
+          d.storagePath.startsWith("blob:") ||
+          d.storagePath.startsWith("data:")
+        ) {
+          throw new HttpError(
+            422,
+            "Jalur dokumen fiktif/staging lokal tidak diizinkan; unggah berkas terlebih dahulu",
+            "INVALID_STORAGE_PATH",
+          );
+        }
+        if (!d.storagePath.startsWith(`student-documents/${ctx.actor.id}/`)) {
+          throw new HttpError(
+            403,
+            "Dokumen harus diunggah oleh akun yang sedang aktif",
+            "FORBIDDEN",
+          );
+        }
+        await verifyStudentFile(
+          d.storagePath,
+          ["image/jpeg", "image/png", "image/webp", "application/pdf"],
+          5 * 1024 * 1024,
+        );
+        await tx.insert(s.studentDocuments).values({
+          studentId,
+          documentType: d.documentType,
+          documentName: d.documentName,
+          documentNumber: d.documentNumber,
+          storagePath: d.storagePath,
+          originalFilename: d.originalFilename || d.documentName,
+          mimeType: d.mimeType || "application/pdf",
+          fileSize: d.fileSize || 1024,
+          verificationStatus: "PENDING",
+          uploadedBy: ctx.actor.id,
+        });
+        existingPaths.add(d.storagePath);
+      }
+    }
+
     // Audit log
     await audit(tx, ctx, "UPDATE", "students", studentId, existing, updated);
 
@@ -1818,6 +1886,7 @@ export async function registerStudentDocument(
   studentId: string,
   input: unknown,
 ) {
+  if (!isGuardian(ctx.actor)) allow(ctx.actor, "master");
   await ownStudent(db, ctx.actor, studentId);
   const data = registerDocSchema.parse(input);
 
@@ -1937,6 +2006,7 @@ export async function requestProfileChange(
   studentId: string,
   input: unknown,
 ) {
+  if (!isGuardian(ctx.actor)) allow(ctx.actor, "master");
   await ownStudent(db, ctx.actor, studentId);
   const { patch } = changeRequestSchema.parse(input);
 

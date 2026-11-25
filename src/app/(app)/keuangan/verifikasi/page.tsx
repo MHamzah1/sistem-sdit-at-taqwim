@@ -149,12 +149,12 @@ export default function VerifikasiPembayaranPage() {
                               key={proof.id}
                               type="button"
                               className="st-btn-action detail"
-                              onClick={() =>
+                              onClick={() => {
                                 void run(
                                   () => downloadProof(proof),
                                   "Bukti transfer diunduh",
-                                )
-                              }
+                                ).catch(() => {});
+                              }}
                               title={`Unduh ${proof.filename}`}
                             >
                               <Download size={14} />

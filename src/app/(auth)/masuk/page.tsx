@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, type FormEvent } from "react";
+import React, { useState, useRef, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/api";
 import {
@@ -26,7 +26,16 @@ export default function MasukPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [schoolPhone, setSchoolPhone] = useState("6281234567890");
   const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api<{ schoolName?: string; phone?: string }>("public/school")
+      .then((info) => {
+        if (info?.phone) setSchoolPhone(info.phone);
+      })
+      .catch(() => {});
+  }, []);
 
   const togglePasswordVisibility = () => {
     const input = passwordInputRef.current;
@@ -54,7 +63,11 @@ export default function MasukPage() {
     setError("");
 
     try {
-      await api("auth/login", "POST", { email: email.trim(), password });
+      await api("auth/login", "POST", {
+        email: email.trim(),
+        password,
+        rememberMe,
+      });
       router.push("/dashboard");
     } catch (err) {
       setError(
@@ -320,7 +333,7 @@ export default function MasukPage() {
             <span>© 2026 SDIT AT-TAQWIM. All rights reserved.</span>
             <div className="payoneer-footer-links">
               <a
-                href="https://wa.me/6281234567890?text=Halo%20Tata%20Usaha%20SDIT%20AT-TAQWIM,%20saya%20butuh%20bantuan%20akses%20login%20sistem"
+                href={`https://wa.me/${schoolPhone}?text=Halo%20Tata%20Usaha%20SDIT%20AT-TAQWIM,%20saya%20butuh%20bantuan%20akses%20login%20sistem`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -432,7 +445,7 @@ export default function MasukPage() {
                 Tutup
               </button>
               <a
-                href="https://wa.me/6281234567890?text=Assalamu%27alaikum%20Tata%20Usaha%20SDIT%20AT-TAQWIM,%20saya%20ingin%20mengajukan%20reset%20kata%20sandi%20akun%20sistem."
+                href={`https://wa.me/${schoolPhone}?text=Assalamu%27alaikum%20Tata%20Usaha%20SDIT%20AT-TAQWIM,%20saya%20ingin%20mengajukan%20reset%20kata%20sandi%20akun%20sistem.`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="payoneer-submit-btn"

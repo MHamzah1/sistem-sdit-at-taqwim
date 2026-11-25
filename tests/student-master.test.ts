@@ -29,13 +29,16 @@ import {
   getProfileChangeRequests,
   getStudentsCompletenessSummary,
   getStudentFullProfile,
+  registerStudentDocument,
+  requestProfileChange,
   createStudentAtomic,
   updateStudentProfile,
   previewStudentImport,
   fullStudentProfileSchema,
 } from "../server/studentMaster";
+import { handle } from "../server/app";
 import { normalizeDraftData } from "../src/app/(app)/master/siswa/tambah/page";
-import { getStudentPhotoUrl } from "../src/lib/api";
+import { ApiError, csvCell, getStudentPhotoUrl } from "../src/lib/api";
 import { verifyStudentFile, validateSignature } from "../server/files";
 import {
   sanitizeForAudit,
@@ -1573,6 +1576,257 @@ test("ISU-001 (RED): Fallback skema dasar 30-tabel menangani cause.code 42P01/42
   assert.equal(updatedBase30.name, "Siswa Mode Dasar 30 Update");
   const baseSummary = await getStudentsCompletenessSummary(db, actor);
   assert.ok(baseSummary[createdBase30.id]);
+
+  await pg.close();
+});
+
+test("Audit Code Fixes (RED): sanitizeForAudit snake_case, doc enums, updateStudentProfile docs/family removal, RBAC docs & verifyStudentFile", async () => {
+  // 1. sanitizeForAudit must redact snake_case DB columns (select * in mutateResource)
+  const snakeSanitized = sanitizeForAudit({
+    id: "std-1",
+    name: "Ahmad",
+    family_card_number: "3201011005180002",
+    birth_certificate_number: "AKTA-998877",
+    monthly_income_range: "RP_5_JT_SD_20_JT",
+    password_hash: "scrypt:salt:hash",
+    idempotency_key: "key-123",
+  }) as Record<string, unknown>;
+  assert.equal(snakeSanitized.name, "Ahmad");
+  assert.equal(snakeSanitized.family_card_number, "[REDACTED]");
+  assert.equal(snakeSanitized.birth_certificate_number, "[REDACTED]");
+  assert.equal(snakeSanitized.monthly_income_range, "[REDACTED]");
+  assert.equal(snakeSanitized.password_hash, "[REDACTED]");
+  assert.equal(snakeSanitized.idempotency_key, "[REDACTED]");
+
+  // 2. studentDocumentItemSchema must accept DOCUMENT_TYPES from UI
+  for (const docType of ["IJAZAH_TK", "BUKTI_NISN", "BUKTI_BANTUAN", "LAINNYA", "KTP_WALI", "RAPOR_ASAL"]) {
+    const parsedDoc = studentDocumentItemSchema.parse({
+      documentType: docType,
+      documentName: "Dokumen Uji",
+      storagePath: "student-documents/00000000-0000-0000-0000-000000000001/doc.pdf",
+      originalFilename: "doc.pdf",
+      mimeType: "application/pdf",
+      fileSize: 1024,
+    });
+    assert.equal(parsedDoc.documentType, docType);
+  }
+
+  // 3. verifyStudentFile in production without BLOB_READ_WRITE_TOKEN must throw 503 CONFIG_ERROR
+  const origNodeEnv = process.env.NODE_ENV;
+  const origBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  try {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    await assert.rejects(
+      () => verifyStudentFile("student-documents/usr/file.pdf"),
+      (err: any) => err.status === 503 && err.code === "CONFIG_ERROR",
+    );
+  } finally {
+    if (origNodeEnv === undefined) {
+      delete (process.env as Record<string, string | undefined>).NODE_ENV;
+    } else {
+      (process.env as Record<string, string | undefined>).NODE_ENV = origNodeEnv;
+    }
+    if (origBlobToken !== undefined) process.env.BLOB_READ_WRITE_TOKEN = origBlobToken;
+  }
+
+  // 4. DB integration: updateStudentProfile handles documents & family mode "none", RBAC blocks KEPALA_SEKOLAH
+  const pg = new PGlite();
+  const nativeDb = drizzle(pg, { schema });
+  await migrate(nativeDb, { migrationsFolder: "./migrations/postgres" });
+  const db = nativeDb as unknown as Database;
+  const adminEmail = "admin-fix@test.local";
+  const adminPass = "PasswordSuperAman123!";
+  await initialize(db, adminEmail, adminPass);
+
+  const [adminRow] = await db.select().from(schema.users);
+  const adminActor: Actor = {
+    id: adminRow.id,
+    name: adminRow.name,
+    email: adminRow.email,
+    roles: ["SUPER_ADMIN"],
+    permissions: ["read", "master", "finance", "principal", "settings", "audit", "users"],
+  };
+  const adminCtx = { actor: adminActor };
+
+  const [year] = await db
+    .insert(schema.academicYears)
+    .values({ name: "TA Fix 2026", startDate: "2026-07-01", endDate: "2027-06-30", active: true })
+    .returning();
+  const [cls] = await db
+    .insert(schema.classes)
+    .values({ name: "Kelas Fix", academicYearId: year.id })
+    .returning();
+
+  const created = await createStudentAtomic(
+    db,
+    adminCtx,
+    fullStudentProfileSchema.parse({
+      student: {
+        name: "Siswa Audit Fix",
+        nis: "FIX-001",
+        classId: cls.id,
+        enrolledOn: "2026-07-15",
+      },
+      family: {
+        father: { mode: "new", data: { fullName: "Ayah Awal", lifeStatus: "ALIVE" } },
+      },
+    }),
+  );
+
+  // Update adds documents + unlinks father with mode: "none"
+  const docPath = `student-documents/${adminActor.id}/00000000-0000-4000-8000-000000000011.pdf`;
+  await updateStudentProfile(
+    db,
+    adminCtx,
+    created.id,
+    fullStudentProfileSchema.parse({
+      student: {
+        name: "Siswa Audit Fix",
+        nis: "FIX-001",
+        classId: cls.id,
+        enrolledOn: "2026-07-15",
+      },
+      family: {
+        father: { mode: "none" },
+      },
+      documents: [
+        {
+          documentType: "IJAZAH_TK",
+          documentName: "Ijazah TK",
+          storagePath: docPath,
+          originalFilename: "ijazah.pdf",
+          mimeType: "application/pdf",
+          fileSize: 2048,
+        },
+      ],
+    }),
+  );
+
+  const updatedProfile = await getStudentFullProfile(db, adminActor, created.id);
+  assert.equal(updatedProfile.documents.length, 1);
+  assert.equal(updatedProfile.documents[0].documentType, "IJAZAH_TK");
+  assert.equal(
+    updatedProfile.family.some((f: any) => f.relationshipType === "FATHER"),
+    false,
+    "Father relation must be removed when mode === 'none'",
+  );
+
+  // KEPALA_SEKOLAH (only read/principal/audit) must NOT be able to register documents or change requests or get doc upload token
+  const kepsekActor: Actor = {
+    id: "00000000-0000-4000-8000-000000000099",
+    name: "Kepsek",
+    email: "kepsek-fix@test.local",
+    roles: ["KEPALA_SEKOLAH"],
+    permissions: ["read", "principal", "audit"],
+  };
+  await assert.rejects(
+    () =>
+      registerStudentDocument(db, { actor: kepsekActor }, created.id, {
+        documentType: "KK",
+        documentName: "KK",
+        storagePath: `student-documents/${kepsekActor.id}/doc.pdf`,
+        originalFilename: "kk.pdf",
+        mimeType: "application/pdf",
+        fileSize: 1024,
+      }),
+    (err: any) => err.status === 403,
+  );
+  await assert.rejects(
+    () =>
+      requestProfileChange(db, { actor: kepsekActor }, created.id, {
+        patch: { nickname: "Baru", reason: "Ubah panggilan" },
+      }),
+    (err: any) => err.status === 403,
+  );
+
+  // Create real user with KEPALA_SEKOLAH role to test POST /api/files/upload authorization
+  const { hashPassword } = await import("../server/security");
+  const pwHash = await hashPassword("PasswordKepsek123!");
+  const [kepsekUser] = await db
+    .insert(schema.users)
+    .values({ name: "Kepsek Auth", email: "kepsek-auth@test.local", passwordHash: pwHash })
+    .returning();
+  const [kepsekRole] = await db
+    .select()
+    .from(schema.roles)
+    .where(sql`code = 'KEPALA_SEKOLAH'`);
+  await db.insert(schema.userRoles).values({ userId: kepsekUser.id, roleId: kepsekRole.id });
+  const kepsekLogin = await handle(
+    new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { origin: "http://localhost:3000", "content-type": "application/json" },
+      body: JSON.stringify({ email: "kepsek-auth@test.local", password: "PasswordKepsek123!" }),
+    }),
+    db,
+  );
+  const kepsekCookie = kepsekLogin.headers.get("set-cookie")!.split(";")[0];
+  const uploadRes = await handle(
+    new Request("http://localhost:3000/api/files/upload", {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:3000",
+        cookie: kepsekCookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "blob.generate-client-token",
+        payload: {
+          pathname: `student-documents/${kepsekUser.id}/00000000-0000-4000-8000-000000000012.pdf`,
+          callbackUrl: "http://localhost:3000/api/files/upload",
+          clientPayload: null,
+          multipart: false,
+        },
+      }),
+    }),
+    db,
+  );
+  assert.equal(uploadRes.status, 403);
+
+  // Cross-admin edit preserving existing doc does not duplicate or throw 403
+  const [tuUser] = await db
+    .insert(schema.users)
+    .values({ name: "Staff TU Kedua", email: "tu2@test.local", passwordHash: pwHash })
+    .returning();
+  const secondStaffActor: Actor = {
+    id: tuUser.id,
+    name: "Staff TU Kedua",
+    email: "tu2@test.local",
+    roles: ["TU_KEUANGAN"],
+    permissions: ["read", "master", "finance", "audit"],
+  };
+  await updateStudentProfile(
+    db,
+    { actor: secondStaffActor },
+    created.id,
+    fullStudentProfileSchema.parse({
+      student: {
+        name: "Siswa Audit Fix 2",
+        nis: "FIX-001",
+        classId: cls.id,
+        enrolledOn: "2026-07-15",
+      },
+      documents: [
+        {
+          id: updatedProfile.documents[0].id,
+          documentType: "IJAZAH_TK",
+          documentName: "Ijazah TK",
+          storagePath: docPath,
+          originalFilename: "ijazah.pdf",
+          mimeType: "application/pdf",
+          fileSize: 2048,
+        },
+      ],
+    }),
+  );
+  const afterCrossStaffEdit = await getStudentFullProfile(db, adminActor, created.id);
+  assert.equal(afterCrossStaffEdit.documents.length, 1);
+
+  // ApiError & csvCell safety helpers
+  const apiErr = new ApiError(503, "Schema not ready", "SCHEMA_NOT_READY");
+  assert.equal(apiErr.code, "SCHEMA_NOT_READY");
+  assert.equal(csvCell('=cmd|"/c calc"!A0'), '"\'=cmd|""/c calc""!A0"');
+  assert.equal(csvCell('+SUM(1,2)'), '"\'+SUM(1,2)"');
 
   await pg.close();
 });

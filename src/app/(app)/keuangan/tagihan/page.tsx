@@ -166,6 +166,7 @@ export default function TagihanSppPage() {
             >
               <option value="ALL">Semua Status</option>
               <option value="UNPAID">Belum Lunas (UNPAID)</option>
+              <option value="PENDING_VERIFICATION">Menunggu Verifikasi (PENDING)</option>
               <option value="OVERDUE">Lewat Jatuh Tempo (OVERDUE)</option>
               <option value="PAID">Lunas (PAID)</option>
             </select>
@@ -269,7 +270,11 @@ export default function TagihanSppPage() {
           initialStudent={paymentStudentId}
           close={() => setPaymentStudentId(null)}
           saved={async () => {
-            await run(async () => {}, "Pembayaran tersimpan");
+            try {
+              await run(async () => {}, "Pembayaran tersimpan");
+            } catch {
+              // Error ditangani di AppContext
+            }
           }}
         />
       )}

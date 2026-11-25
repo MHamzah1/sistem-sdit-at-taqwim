@@ -133,8 +133,8 @@ export function sanitizeForAudit(data: unknown): unknown {
   const obj = data as Record<string, unknown>;
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
-    const lowerKey = key.toLowerCase();
-    if (SENSITIVE_AUDIT_KEYS.has(lowerKey)) {
+    const normalizedKey = key.toLowerCase().replaceAll("_", "");
+    if (SENSITIVE_AUDIT_KEYS.has(normalizedKey)) {
       result[key] = "[REDACTED]";
     } else if (typeof val === "object" && val !== null) {
       result[key] = sanitizeForAudit(val);

@@ -338,11 +338,16 @@ export default function PeriodeUjianPage() {
 
   const handleDelete = async () => {
     if (!examToDelete) return;
-    await run(
-      () => api(`exams/${examToDelete.id}`, "DELETE"),
-      `Periode ujian ${examToDelete.name} berhasil dihapus`,
-    );
-    setExamToDelete(null);
+    try {
+      await run(
+        () => api(`exams/${examToDelete.id}`, "DELETE"),
+        `Periode ujian ${examToDelete.name} berhasil dihapus`,
+      );
+    } catch {
+      // Pesan error ditampilkan oleh AppContext
+    } finally {
+      setExamToDelete(null);
+    }
   };
 
   const confirmDeleteType = async () => {
@@ -355,11 +360,16 @@ export default function PeriodeUjianPage() {
       setTypeToDelete(null);
       return;
     }
-    await run(
-      () => api(`exam-types/${typeToDelete.id}`, "DELETE"),
-      `Jenis ujian ${typeToDelete.name} berhasil dihapus`,
-    );
-    setTypeToDelete(null);
+    try {
+      await run(
+        () => api(`exam-types/${typeToDelete.id}`, "DELETE"),
+        `Jenis ujian ${typeToDelete.name} berhasil dihapus`,
+      );
+    } catch {
+      // Pesan error ditampilkan oleh AppContext
+    } finally {
+      setTypeToDelete(null);
+    }
   };
 
   return (

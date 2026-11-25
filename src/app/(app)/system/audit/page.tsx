@@ -4,13 +4,14 @@ import React, { useState, useEffect } from "react";
 import { ClipboardList, ShieldAlert, ChevronLeft, ChevronRight } from "lucide-react";
 import { useApp } from "@/src/lib/context/AppContext";
 import { api } from "@/src/lib/api";
+import { formatDateTimeIndo } from "@/src/lib/formatters";
 
 interface AuditLog {
   id: string;
   action: string;
   entity: string;
-  entityId: string;
-  userId: string;
+  entityId: string | null;
+  userId: string | null;
   createdAt: string;
   before: unknown;
   after: unknown;
@@ -51,7 +52,8 @@ export default function AuditLogPage() {
     );
   }
 
-  const getUserName = (userId: string) => {
+  const getUserName = (userId: string | null) => {
+    if (!userId) return "Sistem";
     return state?.users.find((u) => u.id === userId)?.name || userId;
   };
 
@@ -118,7 +120,7 @@ export default function AuditLogPage() {
                   <tr key={row.id} className="st-table-row">
                     <td>
                       <span style={{ fontSize: 12, fontFamily: "monospace", color: "#64748b" }}>
-                        {row.createdAt.replace("T", " ").slice(0, 19)}
+                        {formatDateTimeIndo(row.createdAt)}
                       </span>
                     </td>
                     <td>
@@ -134,7 +136,7 @@ export default function AuditLogPage() {
                     </td>
                     <td>
                       <span style={{ fontSize: 12, fontFamily: "monospace", color: "#64748b" }}>
-                        {row.entityId.slice(0, 8)}…
+                        {row.entityId ? `${row.entityId.slice(0, 8)}…` : "—"}
                       </span>
                     </td>
                     <td>
@@ -171,7 +173,7 @@ export default function AuditLogPage() {
           <button
             type="button"
             className="st-btn-secondary"
-            disabled={rows.length < 20 || loading}
+            disabled={rows.length < 50 || loading}
             onClick={() => setPage((p) => p + 1)}
           >
             <span>Selanjutnya</span>

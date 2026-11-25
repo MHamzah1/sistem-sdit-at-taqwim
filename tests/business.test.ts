@@ -903,7 +903,37 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         cookie,
         200,
       );
+      const publicSchoolRes = await request("public/school");
+      assert.equal(publicSchoolRes.status, 200);
+      assert.deepEqual(await publicSchoolRes.json(), {
+        schoolName: "Test School",
+        phone: "6281234567890",
+      });
     });
+    await t.test(
+      "login rememberMe controls session cookie Max-Age and expiration",
+      async () => {
+        const standardLogin = await request("auth/login", "POST", {
+          email: f.email,
+          password: f.password,
+          rememberMe: false,
+        });
+        assert.equal(standardLogin.status, 200);
+        assert.ok(
+          standardLogin.headers.get("set-cookie")!.includes("Max-Age=28800"),
+        );
+
+        const rememberLogin = await request("auth/login", "POST", {
+          email: f.email,
+          password: f.password,
+          rememberMe: true,
+        });
+        assert.equal(rememberLogin.status, 200);
+        assert.ok(
+          rememberLogin.headers.get("set-cookie")!.includes("Max-Age=604800"),
+        );
+      },
+    );
     await t.test(
       "logout revokes session and cross-session persistence remains",
       async () => {
@@ -931,6 +961,59 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
           cookie,
         );
         assert.equal(invalid.status, 422);
+      },
+    );
+    await t.test(
+      "bulk exam card generation skips active students in other academic years",
+      async () => {
+        const baselineBulk = await post(
+          "exam-cards/bulk",
+          { examPeriodId: examId },
+          tuCookie,
+          200,
+        );
+        const otherYear = await post(
+          "academic-years",
+          {
+            name: `Test Other Year ${year + 1}`,
+            startDate: `${year + 1}-01-01`,
+            endDate: `${year + 1}-12-31`,
+            active: false,
+          },
+          cookie,
+          201,
+        );
+        const otherYearClass = await post(
+          "classes",
+          { name: "Other Year Class", academicYearId: otherYear.id },
+          cookie,
+          201,
+        );
+        await post(
+          "students",
+          {
+            name: "Siswa Tahun Lain",
+            nis: "TEST-OTHER-YEAR",
+            classId: otherYearClass.id,
+            enrolledOn: `${year + 1}-01-05`,
+            active: true,
+          },
+          cookie,
+          201,
+        );
+        const crossYearBulk = await post(
+          "exam-cards/bulk",
+          { examPeriodId: examId },
+          tuCookie,
+          200,
+        );
+        assert.equal(crossYearBulk.totalStudents, baselineBulk.totalStudents);
+        await post(
+          "exam-cards/bulk",
+          { examPeriodId: examId, classId: otherYearClass.id },
+          tuCookie,
+          422,
+        );
       },
     );
     await t.test(

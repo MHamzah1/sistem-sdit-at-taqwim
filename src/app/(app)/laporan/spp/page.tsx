@@ -12,6 +12,7 @@ import { useApp } from "@/src/lib/context/AppContext";
 import { Badge } from "@/src/components/Badge";
 import { money } from "@/src/lib/formatters";
 import { statusLabels } from "@/src/lib/calculations";
+import { csvCell } from "@/src/lib/api";
 
 export default function LaporanSppPage() {
   const { state, loading, balance, className, yearName } = useApp();
@@ -76,16 +77,16 @@ export default function LaporanSppPage() {
         (e) => e.studentId === s.id && e.examPeriodId === currentExam?.id,
       );
       return [
-        `"${s.nis}"`,
-        `"${s.name}"`,
-        `"${className(s.classId)}"`,
-        balance(s.id),
-        `"${currentExam?.name || ""}"`,
-        `"${statusLabels[elig?.status || "NOT_EVALUATED"]}"`,
+        csvCell(s.nis),
+        csvCell(s.name),
+        csvCell(className(s.classId)),
+        csvCell(balance(s.id)),
+        csvCell(currentExam?.name || ""),
+        csvCell(statusLabels[elig?.status || "NOT_EVALUATED"]),
       ].join(",");
     });
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const csvContent = "\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

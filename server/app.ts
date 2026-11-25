@@ -103,6 +103,28 @@ export async function handle(
         return json({ status: "error", database: "unavailable" }, 503);
       }
     }
+    if (path === "public/school" && method === "GET") {
+      const [schoolSetting] = await db
+        .select()
+        .from(s.systemSettings)
+        .where(eq(s.systemSettings.key, "school"));
+      const val = (schoolSetting?.value || {}) as {
+        schoolName?: string;
+        phone?: string;
+      };
+      let normalized = "";
+      if (val.phone) {
+        try {
+          normalized = normalizePhone(String(val.phone));
+        } catch {
+          normalized = "";
+        }
+      }
+      return json({
+        schoolName: val.schoolName || "SDIT AT-TAQWIM",
+        phone: normalized,
+      });
+    }
     if (path === "files/upload" && method === "POST")
       return json(await uploadToken(db, request));
     csrf(request);
@@ -111,6 +133,7 @@ export async function handle(
         .object({
           email: z.email().toLowerCase(),
           password: z.string().min(1).max(128),
+          rememberMe: z.boolean().optional().default(false),
         })
         .strict()
         .parse(await payload(request));
@@ -131,13 +154,14 @@ export async function handle(
         throw new HttpError(401, "Email atau password salah");
       const actor = await actorFor(db, user.id);
       const token = randomBytes(32).toString("hex");
+      const ttlSeconds = data.rememberMe ? 7 * 24 * 3600 : 8 * 3600;
       await db.transaction(async (tx) => {
         await tx
           .insert(s.sessions)
           .values({
             userId: actor.id,
             tokenHash: tokenHash(token),
-            expiresAt: new Date(Date.now() + 8 * 3600000),
+            expiresAt: new Date(Date.now() + ttlSeconds * 1000),
           });
         await audit(
           tx,
@@ -151,7 +175,9 @@ export async function handle(
           actor.id,
         );
       });
-      return json({ actor }, 200, { "Set-Cookie": sessionCookie(token) });
+      return json({ actor }, 200, {
+        "Set-Cookie": sessionCookie(token, ttlSeconds),
+      });
     }
     const actor = await authenticate(db, request);
     const ctx: Context = {
@@ -504,13 +530,34 @@ export async function handle(
             )[0],
             "Periode ujian tidak ditemukan",
           );
-          const studentConditions = [eq(s.students.active, true)];
+          if (data.classId) {
+            const targetClass = requireValue(
+              (
+                await tx
+                  .select()
+                  .from(s.classes)
+                  .where(eq(s.classes.id, data.classId))
+              )[0],
+              "Kelas tidak ditemukan",
+            );
+            if (targetClass.academicYearId !== exam.academicYearId) {
+              throw new HttpError(
+                422,
+                "Tahun ajaran kelas tidak sesuai periode ujian",
+              );
+            }
+          }
+          const studentConditions = [
+            eq(s.students.active, true),
+            eq(s.classes.academicYearId, exam.academicYearId),
+          ];
           if (data.classId) {
             studentConditions.push(eq(s.students.classId, data.classId));
           }
           const activeStudents = await tx
             .select(STUDENT_BASE_COLUMNS)
             .from(s.students)
+            .innerJoin(s.classes, eq(s.classes.id, s.students.classId))
             .where(and(...studentConditions))
             .orderBy(s.students.name);
 

@@ -55,7 +55,7 @@ function calculateCompletenessScore(
 
 export default function MasterSiswaPage() {
   const router = useRouter();
-  const { state, loading, busy, run, can, isGuardian, refresh } = useApp();
+  const { state, loading, busy, run, can, isGuardian, refresh, setToast, setError } = useApp();
 
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("ALL");
@@ -154,10 +154,10 @@ export default function MasterSiswaPage() {
       if (statusFilter === "ACTIVE" && !s.active) return false;
       if (statusFilter === "INACTIVE" && s.active) return false;
 
-      // Filter by completeness
+      // Filter by completeness (selaras dengan batas isComplete = 100% dari backend)
       const comp = completenessSummary[s.id]?.percentage ?? null;
       if (completenessFilter === "COMPLETE" && (comp === null || comp < 100)) return false;
-      if (completenessFilter === "INCOMPLETE" && (comp === null || comp >= 100)) return false;
+      if (completenessFilter === "INCOMPLETE" && comp !== null && comp >= 100) return false;
 
       // Filter by search
       if (search.trim()) {
@@ -221,7 +221,7 @@ export default function MasterSiswaPage() {
 
   const handleReviewChangeRequest = async (id: string, action: "APPROVED" | "REJECTED") => {
     if (action === "REJECTED" && !reviewNotes.trim()) {
-      alert("Alasan penolakan pengajuan wajib diisi");
+      setError("Alasan penolakan pengajuan wajib diisi");
       return;
     }
     try {
@@ -236,9 +236,10 @@ export default function MasterSiswaPage() {
       );
       setReviewingReqId(null);
       setReviewNotes("");
-      alert(`Pengajuan berhasil di-${action === "APPROVED" ? "setujui" : "tolak"}`);
+      await refresh();
+      setToast(`Pengajuan berhasil ${action === "APPROVED" ? "disetujui" : "ditolak"}`);
     } catch (err: any) {
-      alert(err.message || "Gagal memproses review pengajuan.");
+      setError(err.message || "Gagal memproses review pengajuan.");
     }
   };
 
@@ -508,7 +509,7 @@ export default function MasterSiswaPage() {
             <Users size={18} />
           </div>
           <div>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Total Terdaftar</span>
+            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Total Terdaftar</span>
             <strong style={{ fontSize: 18, color: "#0f172a" }}>{students.length}</strong>
           </div>
         </div>
@@ -539,7 +540,7 @@ export default function MasterSiswaPage() {
             <CheckCircle2 size={18} />
           </div>
           <div>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Siswa Aktif</span>
+            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Siswa Aktif</span>
             <strong style={{ fontSize: 18, color: "#16613e" }}>{activeCount}</strong>
           </div>
         </div>
@@ -570,7 +571,7 @@ export default function MasterSiswaPage() {
             <FileCheck size={18} />
           </div>
           <div>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Biodata Lengkap</span>
+            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Biodata Lengkap</span>
             <strong style={{ fontSize: 18, color: "#2563eb" }}>{completeCount}</strong>
           </div>
         </div>
@@ -601,7 +602,7 @@ export default function MasterSiswaPage() {
             <AlertTriangle size={18} />
           </div>
           <div>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Belum Lengkap</span>
+            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Belum Lengkap</span>
             <strong style={{ fontSize: 18, color: "#d97706" }}>{incompleteCount}</strong>
           </div>
         </div>
@@ -632,7 +633,7 @@ export default function MasterSiswaPage() {
             <Clock size={18} />
           </div>
           <div>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>Draf Pendaftaran</span>
+            <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>Draf Pendaftaran</span>
             <strong style={{ fontSize: 18, color: "#7c3aed" }}>{drafts.length}</strong>
           </div>
         </div>
@@ -689,8 +690,8 @@ export default function MasterSiswaPage() {
               aria-label="Filter Kelengkapan Berkas"
             >
               <option value="ALL">Semua Kelengkapan</option>
-              <option value="COMPLETE">Lengkap (≥ 80%)</option>
-              <option value="INCOMPLETE">Belum Lengkap (&lt; 80%)</option>
+              <option value="COMPLETE">Lengkap (100%)</option>
+              <option value="INCOMPLETE">Belum Lengkap (&lt; 100%)</option>
             </select>
           </div>
 
@@ -834,12 +835,12 @@ export default function MasterSiswaPage() {
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: 3, width: 110 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                            <span style={{ color: "var(--muted)" }}>Biodata</span>
+                            <span style={{ color: "var(--muted-foreground)" }}>Biodata</span>
                             <strong
                               style={{
                                 color:
                                   completenessPercent === null
-                                    ? "var(--muted)"
+                                    ? "var(--muted-foreground)"
                                     : completenessPercent >= 80
                                     ? "#16613e"
                                     : completenessPercent >= 50
@@ -962,7 +963,7 @@ export default function MasterSiswaPage() {
         >
           <div style={{ maxHeight: "65vh", overflowY: "auto" }}>
             {drafts.length === 0 ? (
-              <p style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: 20 }}>
+              <p style={{ color: "var(--muted-foreground)", fontSize: 13, textAlign: "center", padding: 20 }}>
                 Tidak ada draf pendaftaran tersimpan.
               </p>
             ) : (
@@ -984,7 +985,7 @@ export default function MasterSiswaPage() {
                       <strong style={{ fontSize: 13, display: "block" }}>
                         {d.studentName || d.data?.student?.name || "Calon Siswa Tanpa Nama"}
                       </strong>
-                      <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
                         Langkah Terakhir: <b>{d.stepName || "Identitas"}</b> • Diperbarui:{" "}
                         {formatDateIndo(d.updatedAt)}
                       </span>
@@ -1028,7 +1029,7 @@ export default function MasterSiswaPage() {
         >
           <div style={{ maxHeight: "70vh", overflowY: "auto" }}>
             {pendingRequests.length === 0 ? (
-              <p style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: 20 }}>
+              <p style={{ color: "var(--muted-foreground)", fontSize: 13, textAlign: "center", padding: 20 }}>
                 Semua pengajuan telah diproses atau belum ada pengajuan baru dari wali murid.
               </p>
             ) : (
@@ -1045,20 +1046,25 @@ export default function MasterSiswaPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                       <div>
-                        <strong style={{ fontSize: 13 }}>Siswa ID: {req.studentId}</strong>
-                        <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>
-                          Diajukan pada: {formatDateIndo(req.createdAt)}
+                        <strong style={{ fontSize: 13 }}>
+                          {req.student?.name
+                            ? `${req.student.name} (NIS: ${req.student.nis})`
+                            : `Siswa ID: ${req.studentId}`}
+                        </strong>
+                        <span style={{ fontSize: 11, color: "var(--muted-foreground)", display: "block" }}>
+                          Pemohon: {req.user?.name || req.user?.email || "Wali Murid"} • Diajukan:{" "}
+                          {formatDateIndo(req.createdAt)}
                         </span>
                       </div>
                       <span className="st-badge st-badge-amber">Menunggu Verifikasi</span>
                     </div>
 
                     <div style={{ fontSize: 12, margin: "8px 0" }}>
-                      <span style={{ color: "var(--muted)", display: "block" }}>Alasan Perubahan:</span>
+                      <span style={{ color: "var(--muted-foreground)", display: "block" }}>Alasan Perubahan:</span>
                       <p style={{ margin: "2px 0 8px", fontStyle: "italic" }}>
-                        &ldquo;{req.reason || "Pembaruan data kependudukan / nomor kontak"}&rdquo;
+                        &ldquo;{req.patch?.reason || req.reason || "Pembaruan data kependudukan / nomor kontak"}&rdquo;
                       </p>
-                      <span style={{ color: "var(--muted)", display: "block" }}>Data yang Diusulkan:</span>
+                      <span style={{ color: "var(--muted-foreground)", display: "block" }}>Data yang Diusulkan:</span>
                       <pre
                         style={{
                           background: "#f1f5f9",
@@ -1068,7 +1074,7 @@ export default function MasterSiswaPage() {
                           overflowX: "auto",
                         }}
                       >
-                        {JSON.stringify(req.requestedData, null, 2)}
+                        {JSON.stringify(req.patch ?? req.requestedData ?? {}, null, 2)}
                       </pre>
                     </div>
 
@@ -1175,7 +1181,7 @@ export default function MasterSiswaPage() {
             {importStep === 1 && (
               <div>
                 <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 1: Unduh Format Template Standar</h4>
-                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "0 0 16px" }}>
                   Pastikan susunan kolom berkas impor sesuai dengan struktur baku SDIT AT-TAQWIM agar tidak terjadi kesalahan pemetaan data.
                 </p>
                 <div
@@ -1221,7 +1227,7 @@ export default function MasterSiswaPage() {
             {importStep === 2 && (
               <div>
                 <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 2: Pilih Berkas Excel / CSV</h4>
-                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "0 0 16px" }}>
                   Pilih berkas XLSX atau CSV yang sudah Anda lengkapi sesuai template.
                 </p>
                 <div
@@ -1356,7 +1362,7 @@ export default function MasterSiswaPage() {
             {importStep === 4 && (
               <div>
                 <h4 style={{ margin: "0 0 8px", fontSize: 13 }}>Langkah 4: Konfirmasi Komit Impor</h4>
-                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px" }}>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "0 0 16px" }}>
                   Sebanyak <b>{importRows.length}</b> siswa akan ditambahkan ke database SDIT AT-TAQWIM.
                 </p>
                 <div
@@ -1423,7 +1429,7 @@ export default function MasterSiswaPage() {
               <div style={{ textAlign: "center", padding: "10px 0" }}>
                 <CheckCircle2 size={42} color="#16613e" style={{ margin: "0 auto 10px" }} />
                 <h4 style={{ margin: "0 0 6px", fontSize: 15 }}>Impor Berhasil Selesai!</h4>
-                <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 20px" }}>
+                <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "0 0 20px" }}>
                   Sebanyak {importCommitResult?.createdCount ?? 0} siswa berhasil didaftarkan ke sistem master siswa.
                   {importCommitResult?.failedCount ? ` (${importCommitResult.failedCount} baris gagal).` : ""}
                 </p>

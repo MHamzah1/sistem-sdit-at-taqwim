@@ -836,8 +836,10 @@ export function StudentFormView({
         notes: m.notes || null,
       })),
       documents: documents.map((d) => ({
+        id: d.id && !String(d.id).startsWith("temp-") ? d.id : undefined,
         documentType: d.documentType,
         documentName: d.documentName || d.originalFilename,
+        documentNumber: d.documentNumber || null,
         originalFilename: d.originalFilename || d.documentName,
         storagePath: d.storagePath,
         mimeType: d.mimeType || "application/pdf",
@@ -2709,10 +2711,12 @@ export function StudentFormView({
                 <option value="AKTA_KELAHIRAN">Akta Kelahiran</option>
                 <option value="KTP_AYAH">KTP Ayah</option>
                 <option value="KTP_IBU">KTP Ibu</option>
+                <option value="KTP_WALI">KTP Wali</option>
                 <option value="PAS_FOTO">Pas Foto 3x4</option>
                 <option value="IJAZAH_TK">Ijazah / Sertifikat TK</option>
                 <option value="BUKTI_NISN">Bukti NISN</option>
                 <option value="SURAT_PINDAH">Surat Pindah</option>
+                <option value="RAPOR_ASAL">Buku Rapor Asal</option>
                 <option value="BUKTI_BANTUAN">Bukti KIP / PKH</option>
                 <option value="LAINNYA">Lainnya</option>
               </Select>

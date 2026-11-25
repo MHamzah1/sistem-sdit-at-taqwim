@@ -132,24 +132,33 @@ export default function MasterWaliPage() {
 
   const handleDisconnect = async (guardianId: string, studentId: string) => {
     if (confirm("Lepas akses wali ini dari data siswa?")) {
-      await run(
-        () =>
-          api("guardian-students", "DELETE", {
-            guardianId,
-            studentId,
-          }),
-        "Relasi wali dan siswa dilepas",
-      );
+      try {
+        await run(
+          () =>
+            api("guardian-students", "DELETE", {
+              guardianId,
+              studentId,
+            }),
+          "Relasi wali dan siswa dilepas",
+        );
+      } catch {
+        // Pesan error ditampilkan oleh AppContext
+      }
     }
   };
 
   const handleDeleteGuardian = async () => {
     if (!guardianToDelete) return;
-    await run(
-      () => api(`guardians/${guardianToDelete.id}`, "DELETE"),
-      `Data wali ${guardianToDelete.name} berhasil dihapus`,
-    );
-    setGuardianToDelete(null);
+    try {
+      await run(
+        () => api(`guardians/${guardianToDelete.id}`, "DELETE"),
+        `Data wali ${guardianToDelete.name} berhasil dihapus`,
+      );
+    } catch {
+      // Pesan error ditampilkan oleh AppContext
+    } finally {
+      setGuardianToDelete(null);
+    }
   };
 
   return (

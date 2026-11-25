@@ -21,6 +21,7 @@ import {
   type ExamCardData,
 } from "@/src/components/modals";
 import { api } from "@/src/lib/api";
+import { statusLabels } from "@/src/lib/calculations";
 import type { AppState } from "@/server/state";
 
 type Student = AppState["students"][number];
@@ -368,7 +369,10 @@ export default function KartuUjianPage() {
                 {validationResult.eligibility && (
                   <div style={{ background: "#f8fafc", padding: 12, borderRadius: 8, textAlign: "left" }}>
                     <div style={{ fontSize: 12, color: "#64748b" }}>Status Kelayakan:</div>
-                    <strong>{validationResult.eligibility.status}</strong>
+                    <strong>
+                      {statusLabels[validationResult.eligibility.status] ||
+                        validationResult.eligibility.status}
+                    </strong>
                     <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>Keterangan:</div>
                     <div style={{ fontSize: 13 }}>{validationResult.eligibility.reason}</div>
                   </div>

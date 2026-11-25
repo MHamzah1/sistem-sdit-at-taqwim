@@ -1946,7 +1946,7 @@ fieldset:disabled {
 
 .st-photo-helper-text {
   font-size: 11px;
-  color: var(--muted, #64748b);
+  color: var(--muted-foreground, #64748b);
   text-align: center;
   line-height: 1.4;
 }

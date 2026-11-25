@@ -46,6 +46,7 @@ export default function KarakteristikAnakPage() {
     studentName,
     className,
     setToast,
+    setError,
   } = useApp();
 
   // Tab & Filter States
@@ -118,20 +119,19 @@ export default function KarakteristikAnakPage() {
       ? Math.round((uniqueStudentsFilled / activeStudentsCount) * 100)
       : 0;
 
-  // Deadline terdekat
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Deadline terdekat (disesuaikan ke tanggal WIB)
+  const todayStr = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Jakarta",
+  });
   const upcomingDeadlines = templates
     .filter((t) => t.active && t.deadline >= todayStr)
     .sort((a, b) => a.deadline.localeCompare(b.deadline));
   const nearestTemplate = upcomingDeadlines[0] || templates[0];
 
   const getDaysLeft = (deadline: string) => {
-    const dDate = new Date(deadline);
-    const now = new Date();
-    const diff = Math.ceil(
-      (dDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    return diff;
+    const targetMs = Date.parse(`${String(deadline).slice(0, 10)}T00:00:00Z`);
+    const todayMs = Date.parse(`${todayStr}T00:00:00Z`);
+    return Math.round((targetMs - todayMs) / (1000 * 60 * 60 * 24));
   };
 
   // ==================== FORM ACTIONS ====================
@@ -175,6 +175,23 @@ export default function KarakteristikAnakPage() {
   };
 
   const handleFillForm = (template: Template) => {
+    if (!template.active || template.deadline < todayStr) {
+      setError("Template kuisioner ini sudah ditutup.");
+      return;
+    }
+    const submittedStudentIds = new Set(
+      submissions
+        .filter((sub) => sub.templateId === template.id)
+        .map((sub) => sub.studentId),
+    );
+    const eligibleStudents = students.filter(
+      (s) => s.active && !submittedStudentIds.has(s.id),
+    );
+    if (eligibleStudents.length === 0) {
+      setToast("Seluruh santri aktif sudah mengisi template kuisioner ini.");
+      return;
+    }
+
     const templateFields = fields
       .filter((f) => f.templateId === template.id)
       .sort((a, b) => a.position - b.position);
@@ -186,7 +203,7 @@ export default function KarakteristikAnakPage() {
         {
           key: "studentId",
           label: "Pilih Siswa / Santri",
-          options: students.map((s) => ({
+          options: eligibleStudents.map((s) => ({
             value: s.id,
             label: `${s.name} (${className(s.classId)} - NIS: ${s.nis})`,
           })),
@@ -716,11 +733,12 @@ export default function KarakteristikAnakPage() {
                     <Button
                       type="button"
                       size="sm"
+                      disabled={!isActive}
                       onClick={() => handleFillForm(t)}
                       className="text-xs flex-1 gap-1 font-semibold"
                     >
                       <ClipboardList className="size-3.5" />
-                      <span>Isi Formulir</span>
+                      <span>{isActive ? "Isi Formulir" : "Ditutup"}</span>
                     </Button>
                   </div>
                 </div>
@@ -812,6 +830,7 @@ export default function KarakteristikAnakPage() {
               <Button
                 type="button"
                 size="sm"
+                disabled={!previewTemplate.active || getDaysLeft(previewTemplate.deadline) < 0}
                 onClick={() => {
                   const tmpl = previewTemplate;
                   setPreviewTemplate(null);
@@ -820,7 +839,11 @@ export default function KarakteristikAnakPage() {
                 className="text-xs gap-1.5"
               >
                 <ClipboardList className="size-3.5" />
-                <span>Isi Formulir Ini</span>
+                <span>
+                  {previewTemplate.active && getDaysLeft(previewTemplate.deadline) >= 0
+                    ? "Isi Formulir Ini"
+                    : "Formulir Ditutup"}
+                </span>
               </Button>
             </div>
           </div>
