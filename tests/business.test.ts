@@ -13,6 +13,7 @@ import {
 import { hashPassword, verifyPassword } from "../server/security";
 import { validateSignature } from "../server/files";
 import { handle } from "../server/app";
+import { STUDENT_BASE_COLUMNS } from "../server/state";
 import {
   terbilang,
   receiptNumber,
@@ -117,8 +118,11 @@ test("PostgreSQL migration and all critical API flows", async (t) => {
         const count = await db.execute(
           sql`select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
         );
-        assert.equal(count.rows[0].count, 30);
-        assert.equal((await db.select().from(s.students)).length, 0);
+        assert.equal(count.rows[0].count, 40);
+        assert.equal(
+          (await db.select(STUDENT_BASE_COLUMNS).from(s.students)).length,
+          0,
+        );
       },
     );
     await t.test("authentication and unauthorized endpoints", async () => {

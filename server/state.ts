@@ -1,8 +1,74 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import type { Database } from "../src/db/client";
+import type { Database, Transaction } from "../src/db/client";
 import * as s from "../src/db/schema";
-import { isGuardian, type Actor } from "./security";
+import { isGuardian, isSchemaNotReady, type Actor } from "./security";
+
+export const STUDENT_BASE_COLUMNS = {
+  id: s.students.id,
+  nis: s.students.nis,
+  nisn: s.students.nisn,
+  name: s.students.name,
+  gender: s.students.gender,
+  birthPlace: s.students.birthPlace,
+  birthDate: s.students.birthDate,
+  photoUrl: s.students.photoUrl,
+  classId: s.students.classId,
+  enrolledOn: s.students.enrolledOn,
+  active: s.students.active,
+  createdAt: s.students.createdAt,
+  updatedAt: s.students.updatedAt,
+} as const;
+
+export type StudentSchemaMode = "V3" | "BASE_30";
+
+export async function detectStudentSchemaMode(
+  db: Database | Transaction,
+): Promise<StudentSchemaMode> {
+  try {
+    const res = await db.execute(sql`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'student_drafts'
+        ) AS has_drafts,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'nickname'
+        ) AS has_nickname
+    `);
+    const row = (res.rows[0] || {}) as {
+      has_drafts?: unknown;
+      has_nickname?: unknown;
+    };
+    const hasDrafts =
+      row.has_drafts === true || row.has_drafts === "t" || row.has_drafts === "true";
+    const hasNickname =
+      row.has_nickname === true ||
+      row.has_nickname === "t" ||
+      row.has_nickname === "true";
+    return hasDrafts && hasNickname ? "V3" : "BASE_30";
+  } catch {
+    return "BASE_30";
+  }
+}
+
+export function toCompatStudentRow<T extends { active: boolean }>(row: T) {
+  return {
+    studentStatus: row.active ? ("ACTIVE" as const) : ("INACTIVE" as const),
+    nickname: null as string | null,
+    nik: null as string | null,
+    familyCardNumber: null as string | null,
+    birthCertificateNumber: null as string | null,
+    religion: null as string | null,
+    citizenship: "WNI" as string | null,
+    birthOrder: null as number | null,
+    siblingCount: null as number | null,
+    dailyLanguage: null as string | null,
+    ...row,
+  };
+}
+
 export async function readState(db: Database, actor: Actor) {
   const guardianOnly = isGuardian(actor);
   const linked = guardianOnly
@@ -22,43 +88,17 @@ export async function readState(db: Database, actor: Actor) {
   try {
     students = await db
       .select({
-        id: s.students.id,
-        nis: s.students.nis,
-        nisn: s.students.nisn,
-        name: s.students.name,
-        gender: s.students.gender,
-        birthPlace: s.students.birthPlace,
-        birthDate: s.students.birthDate,
-        photoUrl: s.students.photoUrl,
-        classId: s.students.classId,
-        enrolledOn: s.students.enrolledOn,
-        active: s.students.active,
+        ...STUDENT_BASE_COLUMNS,
         studentStatus: s.students.studentStatus,
         nickname: s.students.nickname,
-        createdAt: s.students.createdAt,
-        updatedAt: s.students.updatedAt,
       })
       .from(s.students)
       .where(scoped(s.students.id))
       .orderBy(s.students.name);
   } catch (err: any) {
-    if (err?.code === "42703" || err?.cause?.code === "42703") {
+    if (isSchemaNotReady(err)) {
       const raw = await db
-        .select({
-          id: s.students.id,
-          nis: s.students.nis,
-          nisn: s.students.nisn,
-          name: s.students.name,
-          gender: s.students.gender,
-          birthPlace: s.students.birthPlace,
-          birthDate: s.students.birthDate,
-          photoUrl: s.students.photoUrl,
-          classId: s.students.classId,
-          enrolledOn: s.students.enrolledOn,
-          active: s.students.active,
-          createdAt: s.students.createdAt,
-          updatedAt: s.students.updatedAt,
-        })
+        .select(STUDENT_BASE_COLUMNS)
         .from(s.students)
         .where(scoped(s.students.id))
         .orderBy(s.students.name);

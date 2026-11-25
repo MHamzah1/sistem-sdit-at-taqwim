@@ -47,3 +47,27 @@ Thumbs.db
 
 # Templates
 tamplate/
+docs/uji/UJI-001-sistem-sdit-at-taqwim/laporan.md
+docs/uji/UJI-001-sistem-sdit-at-taqwim/downloads/Data_Siswa_SDIT_At_Taqwim_2026-11-25.xlsx
+docs/uji/UJI-001-sistem-sdit-at-taqwim/downloads/Template_Import_Siswa_SDIT_At_Taqwim.xlsx
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-01-unauth-redirect.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-02-login-gagal.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-03-login-sukses-dashboard.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-04-navigasi-menu.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-05-proteksi-hapus-siswa.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-06-proteksi-hapus-kelas.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-07-kelayakan-kartu-qr.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-08-master-wali.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-09-master-siswa-daftar.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-10-master-siswa-detail.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-11-tambah-siswa-dan-draf.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-12-ubah-siswa.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-13-import-export-xlsx.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-14-validasi-form-siswa.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-15-validasi-master-kelas.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-16-pembayaran-dan-verifikasi.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-17-visual-format-rupiah-badge.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-18-cetak-formulir-dan-kartu.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-18b-cetak-kartu-massal.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-19-mobile-responsive.png
+docs/uji/UJI-001-sistem-sdit-at-taqwim/evidence/TC-20-logout-sesi-berakhir.png

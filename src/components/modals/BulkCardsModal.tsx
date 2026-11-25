@@ -96,17 +96,18 @@ export function BulkCardsModal({
   }
 
   return (
-    <Modal title="Cetak Massal Kartu Ujian" close={close}>
+    <Modal title="Cetak Massal Kartu Ujian" close={close} className="max-w-4xl">
       <div className="bulk-modal-wrapper">
         <div className="no-print space-y-4 mb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
-            <div className="sm:col-span-2 space-y-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+            <div className="min-w-0 space-y-1.5">
               <label className="block text-xs font-semibold text-foreground/90">
                 Periode Ujian
               </label>
               <Select
                 value={selectedExamId}
                 onChange={(e) => setSelectedExamId(e.target.value)}
+                className="w-full min-w-0"
               >
                 {data.exams.map((ex) => (
                   <option key={ex.id} value={ex.id}>
@@ -115,13 +116,14 @@ export function BulkCardsModal({
                 ))}
               </Select>
             </div>
-            <div className="sm:col-span-2 space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <label className="block text-xs font-semibold text-foreground/90">
                 Rombel / Kelas
               </label>
               <Select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
+                className="w-full min-w-0"
               >
                 <option value="">Semua Kelas</option>
                 {data.classes.map((cls) => (
@@ -131,12 +133,12 @@ export function BulkCardsModal({
                 ))}
               </Select>
             </div>
-            <div className="sm:col-span-1">
+            <div>
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={() => void loadCards()}
-                className="w-full h-9 text-xs"
+                className="w-full sm:w-auto h-9 px-4 text-xs whitespace-nowrap"
               >
                 {busy ? "Memproses..." : "Muat Ulang"}
               </Button>

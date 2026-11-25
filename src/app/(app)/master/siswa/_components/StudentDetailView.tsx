@@ -2565,7 +2565,14 @@ export function StudentDetailView({
                   <tr>
                     <td style={{ padding: "4px 0" }}>Jenis Kelamin / Agama</td>
                     <td style={{ padding: "4px 0" }}>:</td>
-                    <td>{student.gender === "L" ? "Laki-laki" : "Perempuan"} / {studentExtended.religion || "Islam"}</td>
+                    <td>
+                      {student.gender === "L"
+                        ? "Laki-laki"
+                        : student.gender === "P"
+                          ? "Perempuan"
+                          : "—"}{" "}
+                      / {studentExtended.religion || "—"}
+                    </td>
                   </tr>
                   <tr>
                     <td style={{ padding: "4px 0" }}>Anak Ke / Saudara</td>

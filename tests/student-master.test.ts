@@ -1,5 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as XLSX from "xlsx";
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import { migrate } from "drizzle-orm/pglite/migrator";
+import { sql } from "drizzle-orm";
+import * as schema from "../src/db/schema";
+import type { Database } from "../src/db/client";
+import { initialize } from "../server/resources";
 
 process.env.AUTH_SECRET ||= "test-secret-key-32-chars-long-minimum-sdit";
 import {
@@ -17,6 +25,14 @@ import {
   verifyImportPreviewToken,
   commitImportSchema,
   studentDocumentItemSchema,
+  getStudentDrafts,
+  getProfileChangeRequests,
+  getStudentsCompletenessSummary,
+  getStudentFullProfile,
+  createStudentAtomic,
+  updateStudentProfile,
+  previewStudentImport,
+  fullStudentProfileSchema,
 } from "../server/studentMaster";
 import { normalizeDraftData } from "../src/app/(app)/master/siswa/tambah/page";
 import { getStudentPhotoUrl } from "../src/lib/api";
@@ -653,6 +669,13 @@ test("TC-94: generateStudentImportTemplateXlsx generates authentic XLSX binary",
   // OOXML ZIP magic bytes: PK (0x50 0x4B)
   assert.equal(buf[0], 0x50);
   assert.equal(buf[1], 0x4b);
+
+  const wb = XLSX.read(buf, { type: "buffer" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].KELAS, "Kelas 1A");
+  assert.equal(rows[0].TANGGAL_MASUK, "2026-07-13");
 });
 
 test("TC-101 (FIX-010): normalizeDraftData maps draft object shape to arrays without .find is not a function", () => {
@@ -1400,4 +1423,156 @@ test("TC-124 (FIX-014): Persistensi field amount pada bantuan dan headCircumfere
     status: "ACTIVE",
   });
   assert.equal(aid.amount, 750000);
+});
+
+test("ISU-001 (RED): Fallback skema dasar 30-tabel menangani cause.code 42P01/42703 & operasi profil siswa tanpa HTTP 503", async () => {
+  const superAdmin: Actor = {
+    id: "00000000-0000-0000-0000-000000000001",
+    name: "Admin",
+    email: "admin@test.local",
+    roles: ["SUPER_ADMIN"],
+    permissions: ["read", "master", "finance", "principal", "settings", "audit", "users"],
+  };
+
+  // 1. Mock wrapped Drizzle cause.code = 42P01
+  const mockWrappedErrorDb = {
+    select() {
+      return {
+        from() {
+          return {
+            innerJoin() {
+              return this;
+            },
+            where() {
+              return {
+                orderBy() {
+                  return Promise.reject(
+                    Object.assign(new Error("Failed query"), {
+                      cause: { code: "42P01" },
+                    }),
+                  );
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  } as unknown as Database;
+
+  assert.deepEqual(await getStudentDrafts(mockWrappedErrorDb, superAdmin), []);
+  assert.deepEqual(await getProfileChangeRequests(mockWrappedErrorDb, superAdmin), []);
+
+  // 2. Real PGlite DB migrated with 30-table base schema
+  const pg = new PGlite();
+  const nativeDb = drizzle(pg, { schema });
+  await migrate(nativeDb, { migrationsFolder: "./migrations/postgres" });
+  const db = nativeDb as unknown as Database;
+  await initialize(db, "admin@test.local", "PasswordSuperAman123!");
+
+  const [adminRow] = await db.select({ id: schema.users.id }).from(schema.users);
+  const actor: Actor = { ...superAdmin, id: adminRow.id };
+  const ctx = { actor };
+
+  const [year] = await db
+    .insert(schema.academicYears)
+    .values({ name: "TA 2026/2027", startDate: "2026-07-01", endDate: "2027-06-30", active: true })
+    .returning();
+  const [cls] = await db
+    .insert(schema.classes)
+    .values({ name: "Kelas 1A", academicYearId: year.id })
+    .returning();
+
+  const parsedCreate = fullStudentProfileSchema.parse({
+    student: {
+      name: "Siswa Fallback Dasar",
+      nis: "262799001",
+      nisn: "0159990001",
+      gender: "L",
+      birthPlace: "Bekasi",
+      birthDate: "2019-04-12",
+      classId: cls.id,
+      enrolledOn: "2026-07-13",
+      studentStatus: "ACTIVE",
+      active: true,
+    },
+  });
+
+  const created = await createStudentAtomic(db, ctx, parsedCreate);
+  assert.equal(created.name, "Siswa Fallback Dasar");
+
+  const summary = await getStudentsCompletenessSummary(db, actor);
+  assert.ok(summary[created.id]);
+
+  const profile = await getStudentFullProfile(db, actor, created.id);
+  assert.equal(profile.student.id, created.id);
+  assert.equal(profile.student.name, "Siswa Fallback Dasar");
+
+  const parsedUpdate = fullStudentProfileSchema.parse({
+    student: {
+      name: "Siswa Fallback Diperbarui",
+      nis: "262799001",
+      nisn: "0159990001",
+      gender: "L",
+      birthPlace: "Bogor",
+      birthDate: "2019-04-12",
+      classId: cls.id,
+      enrolledOn: "2026-07-13",
+      studentStatus: "ACTIVE",
+      active: true,
+    },
+  });
+  const updated = await updateStudentProfile(db, ctx, created.id, parsedUpdate);
+  assert.equal(updated.name, "Siswa Fallback Diperbarui");
+
+  const preview = await previewStudentImport(db, actor, [
+    {
+      NIS: "262799002",
+      NAMA_LENGKAP: "Calon Siswa Import",
+      JENIS_KELAMIN: "P",
+      KELAS: "Kelas 1A",
+      TANGGAL_MASUK: "2026-07-13",
+    },
+  ]);
+  assert.equal(preview.validRowsCount, 1);
+
+  // 3. Simulasi skema dasar 30 tabel (tanpa student_drafts & kolom nickname/V3)
+  await db.execute(sql`DROP TABLE IF EXISTS student_drafts CASCADE`);
+  await db.execute(
+    sql`ALTER TABLE students DROP COLUMN IF EXISTS nickname, DROP COLUMN IF EXISTS nik`,
+  );
+  const createdBase30 = await createStudentAtomic(
+    db,
+    ctx,
+    fullStudentProfileSchema.parse({
+      student: {
+        name: "Siswa Mode Dasar 30",
+        nis: "262799003",
+        classId: cls.id,
+        enrolledOn: "2026-07-13",
+      },
+    }),
+  );
+  assert.equal(createdBase30.schemaMode, "BASE_30");
+  const baseProfile = await getStudentFullProfile(db, actor, createdBase30.id);
+  assert.equal(baseProfile.schemaMode, "BASE_30");
+  assert.equal(baseProfile.student.name, "Siswa Mode Dasar 30");
+  const updatedBase30 = await updateStudentProfile(
+    db,
+    ctx,
+    createdBase30.id,
+    fullStudentProfileSchema.parse({
+      student: {
+        name: "Siswa Mode Dasar 30 Update",
+        nis: "262799003",
+        classId: cls.id,
+        enrolledOn: "2026-07-13",
+      },
+    }),
+  );
+  assert.equal(updatedBase30.name, "Siswa Mode Dasar 30 Update");
+  const baseSummary = await getStudentsCompletenessSummary(db, actor);
+  assert.ok(baseSummary[createdBase30.id]);
+
+  await pg.close();
 });

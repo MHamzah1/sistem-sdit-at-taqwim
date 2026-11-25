@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
   Users,
+  AlertTriangle,
 } from "lucide-react";
 import { useApp } from "@/src/lib/context/AppContext";
 import { Modal } from "@/src/components/Modal";
@@ -28,6 +29,7 @@ export default function MasterKelasPage() {
     id: string;
     name: string;
   } | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   if (loading || !state) {
     return (
@@ -138,11 +140,18 @@ export default function MasterKelasPage() {
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
-    await run(
-      () => api(`${itemToDelete.type}/${itemToDelete.id}`, "DELETE"),
-      `Data ${itemToDelete.name} berhasil dihapus`,
-    );
-    setItemToDelete(null);
+    setDeleteError("");
+    try {
+      await run(
+        () => api(`${itemToDelete.type}/${itemToDelete.id}`, "DELETE"),
+        `Data ${itemToDelete.name} berhasil dihapus`,
+      );
+      setItemToDelete(null);
+    } catch (e) {
+      setDeleteError(
+        e instanceof Error ? e.message : "Gagal menghapus data",
+      );
+    }
   };
 
   return (
@@ -359,7 +368,12 @@ export default function MasterKelasPage() {
       {itemToDelete && (
         <Modal
           title={`Konfirmasi Hapus ${itemToDelete.type === "academic-years" ? "Tahun Ajaran" : "Kelas"}`}
-          close={() => !busy && setItemToDelete(null)}
+          close={() => {
+            if (!busy) {
+              setItemToDelete(null);
+              setDeleteError("");
+            }
+          }}
         >
           <div className="st-delete-modal-body">
             <p>
@@ -370,12 +384,24 @@ export default function MasterKelasPage() {
               Data yang masih terikat dengan siswa, invoice, atau riwayat nilai
               tidak dapat dihapus untuk menjaga integritas transaksi.
             </div>
+            {deleteError && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 p-3 mt-3 text-xs rounded-lg border border-destructive/20 bg-destructive/10 text-destructive font-medium"
+              >
+                <AlertTriangle size={15} className="shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
             <div className="st-modal-actions" style={{ marginTop: 20 }}>
               <button
                 type="button"
                 className="outline"
                 disabled={busy}
-                onClick={() => setItemToDelete(null)}
+                onClick={() => {
+                  setItemToDelete(null);
+                  setDeleteError("");
+                }}
               >
                 Batal
               </button>

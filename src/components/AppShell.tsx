@@ -24,6 +24,8 @@ import {
   Menu,
   LogOut,
   RefreshCw,
+  AlertCircle,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { Brand } from "./Brand";
@@ -56,7 +58,7 @@ const icons: Record<string, LucideIcon> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { state, loading, busy, toast, refresh, can, isGuardian, actor } = useApp();
+  const { state, loading, busy, toast, error, setError, refresh, can, isGuardian, actor } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const pendingVerificationCount =
@@ -287,6 +289,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Page Content Container */}
         <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-xs font-medium text-destructive shadow-xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setError("")}
+                className="rounded-md p-1 text-destructive/80 hover:bg-destructive/15 hover:text-destructive cursor-pointer"
+                aria-label="Tutup pesan error"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
           {children}
         </main>
       </div>

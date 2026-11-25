@@ -40,7 +40,7 @@ import {
   type ReminderTemplateKey,
 } from "../src/data";
 import { createUser, isResource, mutateResource } from "./resources";
-import { readState } from "./state";
+import { detectStudentSchemaMode, readState, STUDENT_BASE_COLUMNS } from "./state";
 import {
   downloadProof,
   downloadStudentDocument,
@@ -289,8 +289,9 @@ export async function handle(
     }
     if (path === "student-drafts") {
       if (method === "GET") {
-        const drafts = await getStudentDrafts(db, actor);
-        return json({ drafts });
+        const schemaMode = await detectStudentSchemaMode(db);
+        const drafts = schemaMode === "V3" ? await getStudentDrafts(db, actor) : [];
+        return json({ drafts, schemaMode });
       }
       if (method === "POST") return json(await saveStudentDraft(db, actor, await payload(request)), 201);
     }
@@ -508,7 +509,7 @@ export async function handle(
             studentConditions.push(eq(s.students.classId, data.classId));
           }
           const activeStudents = await tx
-            .select()
+            .select(STUDENT_BASE_COLUMNS)
             .from(s.students)
             .where(and(...studentConditions))
             .orderBy(s.students.name);

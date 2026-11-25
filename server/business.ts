@@ -11,6 +11,7 @@ import {
   requireValue,
   type Context,
 } from "./security";
+import { STUDENT_BASE_COLUMNS } from "./state";
 export const uuid = z.string().uuid();
 export const date = z.iso.date();
 export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/);
@@ -58,7 +59,7 @@ export async function lockStudent(tx: Transaction, studentId: string) {
   return requireValue(
     (
       await tx
-        .select()
+        .select(STUDENT_BASE_COLUMNS)
         .from(s.students)
         .where(eq(s.students.id, studentId))
         .for("update")
@@ -71,7 +72,12 @@ export async function recalculate(
   examId?: string,
 ) {
   const student = requireValue(
-    (await tx.select().from(s.students).where(eq(s.students.id, studentId)))[0],
+    (
+      await tx
+        .select(STUDENT_BASE_COLUMNS)
+        .from(s.students)
+        .where(eq(s.students.id, studentId))
+    )[0],
   );
   const classroom = requireValue(
     (
@@ -396,7 +402,7 @@ export async function generateInvoices(
       "Master SPP belum diatur",
     );
     const roster = await tx
-      .select({ student: s.students })
+      .select({ student: STUDENT_BASE_COLUMNS })
       .from(s.students)
       .innerJoin(s.classes, eq(s.classes.id, s.students.classId))
       .where(

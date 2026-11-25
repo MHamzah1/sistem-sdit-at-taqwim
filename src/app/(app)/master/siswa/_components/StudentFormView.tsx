@@ -33,6 +33,7 @@ import {
   HelpCircle,
   Sparkles,
   Info,
+  AlertCircle,
 } from "lucide-react";
 import type { AppState } from "@/server/state";
 import { calculateAge, money } from "@/src/lib/formatters";
@@ -119,6 +120,7 @@ export function StudentFormView({
 
   // Current Active Section (1-10)
   const [activeSection, setActiveSection] = useState(1);
+  const [submitError, setSubmitError] = useState("");
 
   // --- Section 01: Identitas ---
   const sAny = student as any;
@@ -737,43 +739,68 @@ export function StudentFormView({
         notes: academicNotes.trim() || null,
       },
       family: {
-        father: {
-          mode: fatherMode,
-          familyMemberId: fatherId,
-          data: {
-            fullName: fatherName.trim(),
-            nik: fatherNik.trim() || null,
-            lifeStatus: fatherLifeStatus as any,
-            education: fatherEducation,
-            occupation: fatherOccupation,
-            institutionName: fatherInstitution.trim() || null,
-            monthlyIncomeRange: fatherIncome,
-            phone: fatherPhone.trim() || null,
-            email: fatherEmail.trim() || null,
-          },
-        },
-        mother: {
-          mode: motherMode,
-          familyMemberId: motherId,
-          data: {
-            fullName: motherName.trim(),
-            nik: motherNik.trim() || null,
-            lifeStatus: motherLifeStatus as any,
-            education: motherEducation,
-            occupation: motherOccupation,
-            institutionName: motherInstitution.trim() || null,
-            monthlyIncomeRange: motherIncome,
-            phone: motherPhone.trim() || null,
-            email: motherEmail.trim() || null,
-          },
-        },
+        father: (
+          fatherMode === "existing"
+            ? Boolean(fatherId)
+            : Boolean(
+                fatherName.trim() ||
+                  fatherNik.trim() ||
+                  fatherPhone.trim() ||
+                  fatherEmail.trim(),
+              )
+        )
+          ? {
+              mode: fatherMode,
+              familyMemberId: fatherId,
+              data: {
+                fullName: fatherName.trim(),
+                nik: fatherNik.trim() || null,
+                lifeStatus: fatherLifeStatus as any,
+                education: fatherEducation,
+                occupation: fatherOccupation,
+                institutionName: fatherInstitution.trim() || null,
+                monthlyIncomeRange: fatherIncome,
+                phone: fatherPhone.trim() || null,
+                email: fatherEmail.trim() || null,
+              },
+            }
+          : { mode: "none" as const },
+        mother: (
+          motherMode === "existing"
+            ? Boolean(motherId)
+            : Boolean(
+                motherName.trim() ||
+                  motherNik.trim() ||
+                  motherPhone.trim() ||
+                  motherEmail.trim(),
+              )
+        )
+          ? {
+              mode: motherMode,
+              familyMemberId: motherId,
+              data: {
+                fullName: motherName.trim(),
+                nik: motherNik.trim() || null,
+                lifeStatus: motherLifeStatus as any,
+                education: motherEducation,
+                occupation: motherOccupation,
+                institutionName: motherInstitution.trim() || null,
+                monthlyIncomeRange: motherIncome,
+                phone: motherPhone.trim() || null,
+                email: motherEmail.trim() || null,
+              },
+            }
+          : { mode: "none" as const },
         primaryContact,
         paymentResponsible,
-        emergencyContact: {
-          name: emergencyName.trim(),
-          relationship: emergencyRelationship,
-          phone: emergencyPhone.trim(),
-        },
+        emergencyContact:
+          emergencyName.trim() || emergencyPhone.trim()
+            ? {
+                name: emergencyName.trim(),
+                relationship: emergencyRelationship,
+                phone: emergencyPhone.trim(),
+              }
+            : undefined,
       },
       health: {
         bloodType: bloodType as any,
@@ -821,6 +848,7 @@ export function StudentFormView({
 
   const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError("");
     if (!name.trim()) {
       setActiveSection(1);
       alert("Nama lengkap siswa wajib diisi");
@@ -838,12 +866,25 @@ export function StudentFormView({
     }
 
     const payload = getPayload();
-    await onSave(payload);
+    try {
+      await onSave(payload);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Gagal menyimpan data siswa",
+      );
+    }
   };
 
   const handleDraftSaveClick = async () => {
+    setSubmitError("");
     if (onSaveDraft) {
-      await onSaveDraft(getPayload());
+      try {
+        await onSaveDraft(getPayload());
+      } catch (err) {
+        setSubmitError(
+          err instanceof Error ? err.message : "Gagal menyimpan draf pendaftaran",
+        );
+      }
     }
   };
 
@@ -958,7 +999,7 @@ export function StudentFormView({
                   style={{ width: `${completeness.pct}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground pt-0.5">
                 <span className="inline-flex items-center gap-1">
                   <FileText className="size-3 text-primary" />
                   Dokumen: {documents.filter((d) => d.verificationStatus === "VERIFIED").length}/{documents.length || 3} Terverifikasi
@@ -2351,6 +2392,16 @@ export function StudentFormView({
                     </div>
                   </Card>
                 )}
+              </div>
+            )}
+
+            {submitError && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 p-3 mt-6 text-xs rounded-lg border border-destructive/30 bg-destructive/10 text-destructive font-medium"
+              >
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{submitError}</span>
               </div>
             )}
 

@@ -24,6 +24,11 @@ import {
 import { date, uuid, normalizePhone } from "./business";
 import { verifyStudentFile } from "./files";
 import {
+  detectStudentSchemaMode,
+  STUDENT_BASE_COLUMNS,
+  toCompatStudentRow,
+} from "./state";
+import {
   calculateStudentCompleteness,
   type StudentCompletenessInput,
   type StudentCompletenessResult,
@@ -295,7 +300,10 @@ export const familySchema = z.object({
     .object({
       name: z.string().trim().max(200).optional(),
       relationship: z.string().trim().max(50).optional(),
-      phone: z.string().transform(normalizePhone).optional(),
+      phone: z
+        .string()
+        .transform((v) => (v.trim() ? normalizePhone(v) : ""))
+        .optional(),
     })
     .optional(),
 });
@@ -410,6 +418,7 @@ export async function createStudentAtomic(
   input: z.infer<typeof fullStudentProfileSchema>,
 ) {
   allow(ctx.actor, "master");
+  const schemaMode = await detectStudentSchemaMode(db);
 
   // Check NIS uniqueness
   const existingNis = await db
@@ -421,8 +430,8 @@ export async function createStudentAtomic(
     throw new HttpError(409, `NIS ${input.student.nis} sudah terdaftar`);
   }
 
-  // Check NIK uniqueness if provided
-  if (input.student.nik) {
+  // Check NIK uniqueness if provided and supported by schema
+  if (schemaMode === "V3" && input.student.nik) {
     const existingNik = await db
       .select({ id: s.students.id })
       .from(s.students)
@@ -446,6 +455,67 @@ export async function createStudentAtomic(
   }
 
   return await db.transaction(async (tx) => {
+    requireValue(
+      (
+        await tx
+          .select({ id: s.classes.id })
+          .from(s.classes)
+          .where(eq(s.classes.id, input.student.classId))
+      )[0],
+      "Kelas tidak ditemukan",
+    );
+
+    if (schemaMode === "BASE_30") {
+      const inserted = await tx.execute(sql`
+        insert into "students" (
+          "name", "nis", "nisn", "gender", "birth_place",
+          "birth_date", "photo_url", "class_id", "enrolled_on", "active"
+        ) values (
+          ${input.student.name},
+          ${input.student.nis},
+          ${input.student.nisn || null},
+          ${input.student.gender || null},
+          ${input.student.birthPlace || null},
+          ${input.student.birthDate || null},
+          ${input.student.photoUrl || null},
+          ${input.student.classId},
+          ${input.student.enrolledOn},
+          ${input.student.active ?? true}
+        )
+        returning "id", "nis", "nisn", "name", "gender", "birth_place" as "birthPlace",
+                  "birth_date" as "birthDate", "photo_url" as "photoUrl", "class_id" as "classId",
+                  "enrolled_on" as "enrolledOn", "active", "created_at" as "createdAt",
+                  "updated_at" as "updatedAt"
+      `);
+      const createdBase = inserted.rows[0] as {
+        id: string;
+        nis: string;
+        nisn: string | null;
+        name: string;
+        gender: string | null;
+        birthPlace: string | null;
+        birthDate: string | null;
+        photoUrl: string | null;
+        classId: string;
+        enrolledOn: string;
+        active: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      };
+
+      await audit(
+        tx,
+        ctx,
+        "CREATE",
+        "students",
+        createdBase.id,
+        undefined,
+        { name: createdBase.name, nis: createdBase.nis, schemaMode: "BASE_30" },
+      );
+
+      return { ...toCompatStudentRow(createdBase), schemaMode: "BASE_30" as const };
+    }
+
     // 1. Insert Student with all 10 restored typed schema columns
     const [createdStudent] = await tx
       .insert(s.students)
@@ -773,7 +843,7 @@ export async function createStudentAtomic(
       { name: createdStudent.name, nis: createdStudent.nis },
     );
 
-    return createdStudent;
+    return { ...createdStudent, schemaMode: "V3" as const };
   });
 }
 
@@ -784,59 +854,70 @@ export async function getStudentFullProfile(
 ) {
   // Check permission / guardian scoping
   await ownStudent(db, actor, studentId);
+  const schemaMode = await detectStudentSchemaMode(db);
 
-  const [student] = await db
-    .select()
-    .from(s.students)
-    .where(eq(s.students.id, studentId));
+  let student: any;
+  if (schemaMode === "V3") {
+    const [row] = await db
+      .select()
+      .from(s.students)
+      .where(eq(s.students.id, studentId));
+    student = row;
+  } else {
+    const [baseRow] = await db
+      .select(STUDENT_BASE_COLUMNS)
+      .from(s.students)
+      .where(eq(s.students.id, studentId));
+    student = baseRow ? toCompatStudentRow(baseRow) : undefined;
+  }
 
   if (!student) throw new HttpError(404, "Siswa tidak ditemukan", "NOT_FOUND");
 
-  const addresses = await db
-    .select()
-    .from(s.studentAddresses)
-    .where(eq(s.studentAddresses.studentId, studentId));
-
-  const enrollments = await db
-    .select()
-    .from(s.studentEnrollments)
-    .where(eq(s.studentEnrollments.studentId, studentId))
-    .orderBy(desc(s.studentEnrollments.createdAt));
-
-  const familyRelations = await db
-    .select({
-      relation: s.studentFamilyMembers,
-      member: s.familyMembers,
-    })
-    .from(s.studentFamilyMembers)
-    .innerJoin(
-      s.familyMembers,
-      eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
-    )
-    .where(eq(s.studentFamilyMembers.studentId, studentId));
-
-  const [health] = await db
-    .select()
-    .from(s.studentHealthProfiles)
-    .where(eq(s.studentHealthProfiles.studentId, studentId));
-
-  const measurements = await db
-    .select()
-    .from(s.studentPeriodicData)
-    .where(eq(s.studentPeriodicData.studentId, studentId))
-    .orderBy(desc(s.studentPeriodicData.measurementDate));
-
-  const aidRecords = await db
-    .select()
-    .from(s.studentAidRecords)
-    .where(eq(s.studentAidRecords.studentId, studentId))
-    .orderBy(desc(s.studentAidRecords.createdAt));
-
-  const documents = await db
-    .select()
-    .from(s.studentDocuments)
-    .where(eq(s.studentDocuments.studentId, studentId))
-    .orderBy(desc(s.studentDocuments.createdAt));
+  const [addresses, enrollments, familyRelations, healthRows, measurements, aidRecords, documents] =
+    schemaMode === "V3"
+      ? await Promise.all([
+          db
+            .select()
+            .from(s.studentAddresses)
+            .where(eq(s.studentAddresses.studentId, studentId)),
+          db
+            .select()
+            .from(s.studentEnrollments)
+            .where(eq(s.studentEnrollments.studentId, studentId))
+            .orderBy(desc(s.studentEnrollments.createdAt)),
+          db
+            .select({
+              relation: s.studentFamilyMembers,
+              member: s.familyMembers,
+            })
+            .from(s.studentFamilyMembers)
+            .innerJoin(
+              s.familyMembers,
+              eq(s.familyMembers.id, s.studentFamilyMembers.familyMemberId),
+            )
+            .where(eq(s.studentFamilyMembers.studentId, studentId)),
+          db
+            .select()
+            .from(s.studentHealthProfiles)
+            .where(eq(s.studentHealthProfiles.studentId, studentId)),
+          db
+            .select()
+            .from(s.studentPeriodicData)
+            .where(eq(s.studentPeriodicData.studentId, studentId))
+            .orderBy(desc(s.studentPeriodicData.measurementDate)),
+          db
+            .select()
+            .from(s.studentAidRecords)
+            .where(eq(s.studentAidRecords.studentId, studentId))
+            .orderBy(desc(s.studentAidRecords.createdAt)),
+          db
+            .select()
+            .from(s.studentDocuments)
+            .where(eq(s.studentDocuments.studentId, studentId))
+            .orderBy(desc(s.studentDocuments.createdAt)),
+        ])
+      : [[], [], [], [], [], [], []];
+  const [health] = healthRows;
 
   // Submissions for Karakteristik Anak
   const submissions = await db
@@ -930,6 +1011,7 @@ export async function getStudentFullProfile(
   }));
 
   return {
+    schemaMode,
     student: studentProjected,
     addresses,
     enrollments,
@@ -981,44 +1063,21 @@ export async function updateStudentProfile(
   input: z.infer<typeof fullStudentProfileSchema>,
 ) {
   allow(ctx.actor, "master");
+  const schemaMode = await detectStudentSchemaMode(db);
 
   let existing: any;
-  try {
+  if (schemaMode === "V3") {
     const [row] = await db
       .select()
       .from(s.students)
       .where(eq(s.students.id, studentId));
     existing = row;
-  } catch (err: any) {
-    if (err?.code === "42703" || err?.cause?.code === "42703") {
-      const [baseRow] = await db
-        .select({
-          id: s.students.id,
-          nis: s.students.nis,
-          nisn: s.students.nisn,
-          name: s.students.name,
-          gender: s.students.gender,
-          birthPlace: s.students.birthPlace,
-          birthDate: s.students.birthDate,
-          photoUrl: s.students.photoUrl,
-          classId: s.students.classId,
-          enrolledOn: s.students.enrolledOn,
-          active: s.students.active,
-          createdAt: s.students.createdAt,
-          updatedAt: s.students.updatedAt,
-        })
-        .from(s.students)
-        .where(eq(s.students.id, studentId));
-      existing = baseRow
-        ? {
-            ...baseRow,
-            studentStatus: baseRow.active ? "ACTIVE" : "INACTIVE",
-            nik: null,
-          }
-        : null;
-    } else {
-      throw err;
-    }
+  } else {
+    const [baseRow] = await db
+      .select(STUDENT_BASE_COLUMNS)
+      .from(s.students)
+      .where(eq(s.students.id, studentId));
+    existing = baseRow ? toCompatStudentRow(baseRow) : null;
   }
   if (!existing) throw new HttpError(404, "Siswa tidak ditemukan");
 
@@ -1034,8 +1093,8 @@ export async function updateStudentProfile(
     }
   }
 
-  // Check NIK uniqueness if changed
-  if (input.student.nik && input.student.nik !== existing.nik) {
+  // Check NIK uniqueness if changed and supported by schema
+  if (schemaMode === "V3" && input.student.nik && input.student.nik !== existing.nik) {
     const dupNik = await db
       .select({ id: s.students.id })
       .from(s.students)
@@ -1092,6 +1151,29 @@ export async function updateStudentProfile(
           "CLASS_MUTATION_RESTRICTED",
         );
       }
+    }
+
+    if (schemaMode === "BASE_30") {
+      const [updatedBase] = await tx
+        .update(s.students)
+        .set({
+          name: input.student.name,
+          nis: input.student.nis,
+          nisn: input.student.nisn || null,
+          gender: input.student.gender || null,
+          birthPlace: input.student.birthPlace || null,
+          birthDate: input.student.birthDate || null,
+          photoUrl: input.student.photoUrl || null,
+          classId: input.student.classId,
+          enrolledOn: input.student.enrolledOn,
+          active: input.student.active ?? existing.active,
+          updatedAt: new Date(),
+        })
+        .where(eq(s.students.id, studentId))
+        .returning(STUDENT_BASE_COLUMNS);
+
+      await audit(tx, ctx, "UPDATE", "students", studentId, existing, updatedBase);
+      return { ...toCompatStudentRow(updatedBase), schemaMode: "BASE_30" as const };
     }
 
     // 1. Update Student with all 10 schema fields typed
@@ -1617,7 +1699,7 @@ export async function getStudentDrafts(db: Database, actor: Actor) {
       .where(and(eq(s.studentDrafts.userId, actor.id), eq(s.studentDrafts.status, "DRAFT")))
       .orderBy(desc(s.studentDrafts.updatedAt));
   } catch (err: any) {
-    if (err?.code === "42P01" || err?.code === "42703") return [];
+    if (isSchemaNotReady(err)) return [];
     throw err;
   }
 }
@@ -1956,7 +2038,7 @@ export async function getProfileChangeRequests(db: Database, actor: Actor, stude
       .where(condition)
       .orderBy(desc(s.studentProfileChangeRequests.createdAt));
   } catch (err: any) {
-    if (err?.code === "42P01" || err?.code === "42703") return [];
+    if (isSchemaNotReady(err)) return [];
     throw err;
   }
 }
@@ -2207,15 +2289,27 @@ export async function previewStudentImport(
   inputRows: Array<Record<string, string>>,
 ) {
   allow(actor, "master");
+  const schemaMode = await detectStudentSchemaMode(db);
 
-  const existingStudents = await db
-    .select({
-      id: s.students.id,
-      nis: s.students.nis,
-      nisn: s.students.nisn,
-      nik: s.students.nik,
-    })
-    .from(s.students);
+  const existingStudents =
+    schemaMode === "V3"
+      ? await db
+          .select({
+            id: s.students.id,
+            nis: s.students.nis,
+            nisn: s.students.nisn,
+            nik: s.students.nik,
+          })
+          .from(s.students)
+      : (
+          await db
+            .select({
+              id: s.students.id,
+              nis: s.students.nis,
+              nisn: s.students.nisn,
+            })
+            .from(s.students)
+        ).map((st) => ({ ...st, nik: null as string | null }));
 
   const existingNisSet = new Set(
     existingStudents.map((st) => st.nis.trim().toLowerCase()),
@@ -2540,6 +2634,7 @@ export async function commitStudentImport(
   }
 
   const todayStr = new Date().toISOString().split("T")[0];
+  const schemaMode = await detectStudentSchemaMode(db);
 
   return await db.transaction(async (tx) => {
     // Record token usage persistently to prevent concurrent / subsequent replay
@@ -2587,6 +2682,32 @@ export async function commitStudentImport(
             409,
             `NIS ${row.nis} sudah terdaftar pada database`,
           );
+        }
+
+        if (schemaMode === "BASE_30") {
+          const inserted = await tx.execute(sql`
+            insert into "students" (
+              "name", "nis", "nisn", "gender", "birth_place",
+              "birth_date", "class_id", "enrolled_on", "active"
+            ) values (
+              ${row.name},
+              ${row.nis},
+              ${row.nisn || null},
+              ${row.gender === "P" ? "P" : "L"},
+              ${row.birthPlace || null},
+              ${row.birthDate || null},
+              ${row.resolvedClassId},
+              ${row.enrolledOn || todayStr},
+              ${true}
+            )
+            returning "id"
+          `);
+          const student = inserted.rows[0] as { id: string };
+
+          await tx.execute(sql.raw(`RELEASE SAVEPOINT ${spName}`));
+          createdIds.push(student.id);
+          createdCount++;
+          continue;
         }
 
         const [student] = await tx
@@ -2710,6 +2831,7 @@ export function generateStudentImportTemplateXlsx(): Uint8Array {
     "TEMPAT_LAHIR",
     "TANGGAL_LAHIR",
     "KELAS",
+    "TANGGAL_MASUK",
     "NAMA_AYAH",
     "NAMA_IBU",
     "NO_HP_WALI",
@@ -2724,7 +2846,8 @@ export function generateStudentImportTemplateXlsx(): Uint8Array {
     "L",
     "Bogor",
     "2018-05-14",
-    "1-A Abu Bakar",
+    "Kelas 1A",
+    "2026-07-13",
     "Muhammad Ridwan",
     "Siti Nurhaliza",
     "081234567890",
@@ -2741,139 +2864,137 @@ export async function getStudentsCompletenessSummary(
   classId?: string,
 ) {
   allow(actor, "read");
-  try {
-    const studentQuery = classId
-      ? db.select().from(s.students).where(eq(s.students.classId, classId))
-      : db.select().from(s.students);
-    const allStudents = await studentQuery;
-    if (allStudents.length === 0) return {};
+  const schemaMode = await detectStudentSchemaMode(db);
+  const studentQuery = classId
+    ? db
+        .select(STUDENT_BASE_COLUMNS)
+        .from(s.students)
+        .where(eq(s.students.classId, classId))
+    : db.select(STUDENT_BASE_COLUMNS).from(s.students);
+  const baseStudents = await studentQuery;
+  if (baseStudents.length === 0) return {};
 
-    const studentIds = allStudents.map((st) => st.id);
+  const allStudents = baseStudents.map((st) => toCompatStudentRow(st));
+  const studentIds = allStudents.map((st) => st.id);
 
-    // Bulk query all sections without N+1
-    const [addresses, family, health, aid, chars, docs] = await Promise.all([
-      db
-        .select()
-        .from(s.studentAddresses)
-        .where(inArray(s.studentAddresses.studentId, studentIds)),
-      db
-        .select({
-          studentId: s.studentFamilyMembers.studentId,
-          relationshipType: s.studentFamilyMembers.relationshipType,
-          isPrimaryContact: s.studentFamilyMembers.isPrimaryContact,
-          isPaymentResponsible: s.studentFamilyMembers.isPaymentResponsible,
-          isEmergencyContact: s.studentFamilyMembers.isEmergencyContact,
-          fullName: s.familyMembers.fullName,
-          phone: s.familyMembers.phone,
-          lifeStatus: s.familyMembers.lifeStatus,
-        })
-        .from(s.studentFamilyMembers)
-        .leftJoin(
-          s.familyMembers,
-          eq(s.studentFamilyMembers.familyMemberId, s.familyMembers.id),
-        )
-        .where(inArray(s.studentFamilyMembers.studentId, studentIds)),
-      db
-        .select()
-        .from(s.studentHealthProfiles)
-        .where(inArray(s.studentHealthProfiles.studentId, studentIds)),
-      db
-        .select()
-        .from(s.studentAidRecords)
-        .where(inArray(s.studentAidRecords.studentId, studentIds)),
-      db
-        .select()
-        .from(s.characteristicSubmissions)
-        .where(inArray(s.characteristicSubmissions.studentId, studentIds)),
-      db
-        .select()
-        .from(s.studentDocuments)
-        .where(inArray(s.studentDocuments.studentId, studentIds)),
-    ]);
+  const chars = await db
+    .select()
+    .from(s.characteristicSubmissions)
+    .where(inArray(s.characteristicSubmissions.studentId, studentIds));
 
-    const addrMap = new Map<string, any[]>();
-    for (const a of addresses) {
-      if (!addrMap.has(a.studentId)) addrMap.set(a.studentId, []);
-      addrMap.get(a.studentId)!.push(a);
-    }
+  // Bulk query V3 sections only when V3 schema tables exist
+  const [addresses, family, health, aid, docs] =
+    schemaMode === "V3"
+      ? await Promise.all([
+          db
+            .select()
+            .from(s.studentAddresses)
+            .where(inArray(s.studentAddresses.studentId, studentIds)),
+          db
+            .select({
+              studentId: s.studentFamilyMembers.studentId,
+              relationshipType: s.studentFamilyMembers.relationshipType,
+              isPrimaryContact: s.studentFamilyMembers.isPrimaryContact,
+              isPaymentResponsible: s.studentFamilyMembers.isPaymentResponsible,
+              isEmergencyContact: s.studentFamilyMembers.isEmergencyContact,
+              fullName: s.familyMembers.fullName,
+              phone: s.familyMembers.phone,
+              lifeStatus: s.familyMembers.lifeStatus,
+            })
+            .from(s.studentFamilyMembers)
+            .leftJoin(
+              s.familyMembers,
+              eq(s.studentFamilyMembers.familyMemberId, s.familyMembers.id),
+            )
+            .where(inArray(s.studentFamilyMembers.studentId, studentIds)),
+          db
+            .select()
+            .from(s.studentHealthProfiles)
+            .where(inArray(s.studentHealthProfiles.studentId, studentIds)),
+          db
+            .select()
+            .from(s.studentAidRecords)
+            .where(inArray(s.studentAidRecords.studentId, studentIds)),
+          db
+            .select()
+            .from(s.studentDocuments)
+            .where(inArray(s.studentDocuments.studentId, studentIds)),
+        ])
+      : [[], [], [], [], []];
 
-    const familyMap = new Map<string, any[]>();
-    for (const f of family) {
-      if (!familyMap.has(f.studentId)) familyMap.set(f.studentId, []);
-      familyMap.get(f.studentId)!.push(f);
-    }
-
-    const healthMap = new Map<string, any>();
-    for (const h of health) {
-      healthMap.set(h.studentId, h);
-    }
-
-    const aidMap = new Map<string, any[]>();
-    for (const a of aid) {
-      if (!aidMap.has(a.studentId)) aidMap.set(a.studentId, []);
-      aidMap.get(a.studentId)!.push(a);
-    }
-
-    const charMap = new Map<string, any>();
-    for (const c of chars) {
-      charMap.set(c.studentId, c);
-    }
-
-    const docMap = new Map<string, any[]>();
-    for (const d of docs) {
-      if (!docMap.has(d.studentId)) docMap.set(d.studentId, []);
-      docMap.get(d.studentId)!.push(d);
-    }
-
-    const summaryMap: Record<
-      string,
-      { percentage: number; isComplete: boolean; missingCount: number }
-    > = {};
-    for (const st of allStudents) {
-      const studentFamily = familyMap.get(st.id) || [];
-      const father = studentFamily.find((f) => f.relationshipType === "FATHER");
-      const mother = studentFamily.find((f) => f.relationshipType === "MOTHER");
-      const emergency = studentFamily.find((f) => f.isEmergencyContact);
-
-      const comp = calculateStudentCompleteness({
-        student: st,
-        registration: {
-          classId: st.classId,
-          enrolledOn: st.enrolledOn,
-        },
-        addresses: addrMap.get(st.id) || [],
-        father: father
-          ? { fullName: father.fullName, lifeStatus: father.lifeStatus }
-          : undefined,
-        mother: mother
-          ? { fullName: mother.fullName, lifeStatus: mother.lifeStatus }
-          : undefined,
-        emergencyContact: emergency
-          ? { name: emergency.fullName, phone: emergency.phone }
-          : undefined,
-        health: healthMap.get(st.id),
-        aidRecords: aidMap.get(st.id) || [],
-        characteristic: charMap.has(st.id)
-          ? { status: "FILLED" }
-          : { status: "EMPTY" },
-        documents: docMap.get(st.id) || [],
-      });
-
-      summaryMap[st.id] = {
-        percentage: comp.percentage,
-        isComplete: comp.isComplete,
-        missingCount: comp.missingFields.length,
-      };
-    }
-    return summaryMap;
-  } catch (err) {
-    if (isSchemaNotReady(err)) {
-      throw new HttpError(
-        503,
-        "Skema database Master Siswa belum siap",
-        "SCHEMA_NOT_READY",
-      );
-    }
-    throw err;
+  const addrMap = new Map<string, any[]>();
+  for (const a of addresses) {
+    if (!addrMap.has(a.studentId)) addrMap.set(a.studentId, []);
+    addrMap.get(a.studentId)!.push(a);
   }
+
+  const familyMap = new Map<string, any[]>();
+  for (const f of family) {
+    if (!familyMap.has(f.studentId)) familyMap.set(f.studentId, []);
+    familyMap.get(f.studentId)!.push(f);
+  }
+
+  const healthMap = new Map<string, any>();
+  for (const h of health) {
+    healthMap.set(h.studentId, h);
+  }
+
+  const aidMap = new Map<string, any[]>();
+  for (const a of aid) {
+    if (!aidMap.has(a.studentId)) aidMap.set(a.studentId, []);
+    aidMap.get(a.studentId)!.push(a);
+  }
+
+  const charMap = new Map<string, any>();
+  for (const c of chars) {
+    charMap.set(c.studentId, c);
+  }
+
+  const docMap = new Map<string, any[]>();
+  for (const d of docs) {
+    if (!docMap.has(d.studentId)) docMap.set(d.studentId, []);
+    docMap.get(d.studentId)!.push(d);
+  }
+
+  const summaryMap: Record<
+    string,
+    { percentage: number; isComplete: boolean; missingCount: number }
+  > = {};
+  for (const st of allStudents) {
+    const studentFamily = familyMap.get(st.id) || [];
+    const father = studentFamily.find((f) => f.relationshipType === "FATHER");
+    const mother = studentFamily.find((f) => f.relationshipType === "MOTHER");
+    const emergency = studentFamily.find((f) => f.isEmergencyContact);
+
+    const comp = calculateStudentCompleteness({
+      student: st,
+      registration: {
+        classId: st.classId,
+        enrolledOn: st.enrolledOn,
+      },
+      addresses: addrMap.get(st.id) || [],
+      father: father
+        ? { fullName: father.fullName, lifeStatus: father.lifeStatus }
+        : undefined,
+      mother: mother
+        ? { fullName: mother.fullName, lifeStatus: mother.lifeStatus }
+        : undefined,
+      emergencyContact: emergency
+        ? { name: emergency.fullName, phone: emergency.phone }
+        : undefined,
+      health: healthMap.get(st.id),
+      aidRecords: aidMap.get(st.id) || [],
+      characteristic: charMap.has(st.id)
+        ? { status: "FILLED" }
+        : { status: "EMPTY" },
+      documents: docMap.get(st.id) || [],
+    });
+
+    summaryMap[st.id] = {
+      percentage: comp.percentage,
+      isComplete: comp.isComplete,
+      missingCount: comp.missingFields.length,
+    };
+  }
+  return summaryMap;
 }

@@ -32,6 +32,7 @@ export default function DetailSiswaPage({
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [selectedGuardianId, setSelectedGuardianId] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [fullProfile, setFullProfile] = useState<any>(null);
 
   React.useEffect(() => {
@@ -75,11 +76,19 @@ export default function DetailSiswaPage({
   }
 
   const handleDelete = async () => {
-    await run(
-      () => api(`students/${student.id}`, "DELETE"),
-      `Data siswa ${student.name} berhasil dihapus`,
-    );
-    router.push("/master/siswa");
+    setDeleteError("");
+    try {
+      await run(
+        () => api(`students/${student.id}`, "DELETE"),
+        `Data siswa ${student.name} berhasil dihapus`,
+      );
+      setShowDeleteModal(false);
+      router.push("/master/siswa");
+    } catch (e) {
+      setDeleteError(
+        e instanceof Error ? e.message : "Gagal menghapus data siswa",
+      );
+    }
   };
 
   const handleConnectGuardian = async (e: React.FormEvent) => {
@@ -166,7 +175,12 @@ export default function DetailSiswaPage({
       {showDeleteModal && (
         <Modal
           title="Konfirmasi Hapus Siswa"
-          close={() => !busy && setShowDeleteModal(false)}
+          close={() => {
+            if (!busy) {
+              setShowDeleteModal(false);
+              setDeleteError("");
+            }
+          }}
         >
           <div className="st-delete-modal-body">
             <p>
@@ -177,12 +191,24 @@ export default function DetailSiswaPage({
               Data yang telah terikat transaksi keuangan atau ujian tidak dapat
               dihapus untuk menjaga integritas pembukuan dan audit.
             </div>
+            {deleteError && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 p-3 mt-3 text-xs rounded-lg border border-destructive/20 bg-destructive/10 text-destructive font-medium"
+              >
+                <AlertTriangle size={15} className="shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
             <div className="st-modal-actions" style={{ marginTop: 20 }}>
               <button
                 type="button"
                 className="outline"
                 disabled={busy}
-                onClick={() => setShowDeleteModal(false)}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteError("");
+                }}
               >
                 Batal
               </button>

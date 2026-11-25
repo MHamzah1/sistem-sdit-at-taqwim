@@ -97,6 +97,7 @@ export default function MasterSiswaPage() {
   const [paymentStudentId, setPaymentStudentId] = useState<string | null>(null);
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const students = state?.students || [];
   const classes = state?.classes || [];
@@ -106,11 +107,25 @@ export default function MasterSiswaPage() {
     Record<string, { percentage: number; isComplete: boolean; missingCount: number }>
   >({});
 
-  // Fetch drafts, change requests & completeness summary on mount
+  // Fetch drafts, change requests & completeness summary only after session is authenticated
   useEffect(() => {
+    if (!state?.actor) return;
     fetch("/api/student-drafts")
       .then((res) => (res.ok ? res.json() : { drafts: [] }))
-      .then((data) => setDrafts(data.drafts || (Array.isArray(data) ? data : [])))
+      .then((data) => {
+        const serverDrafts = data.drafts || (Array.isArray(data) ? data : []);
+        let localDrafts: any[] = [];
+        try {
+          const raw = localStorage.getItem("taqwim_student_drafts_v1");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) localDrafts = parsed;
+          }
+        } catch {
+          localDrafts = [];
+        }
+        setDrafts([...serverDrafts, ...localDrafts]);
+      })
       .catch(() => setDrafts([]));
 
     fetch("/api/student-profile-change-requests")
@@ -122,7 +137,7 @@ export default function MasterSiswaPage() {
       .then((res) => (res.ok ? res.json() : {}))
       .then((data) => setCompletenessSummary(data || {}))
       .catch(() => {});
-  }, []);
+  }, [state?.actor?.id]);
 
   const pendingRequests = useMemo(
     () => changeRequests.filter((r) => r.status === "SUBMITTED"),
@@ -166,15 +181,34 @@ export default function MasterSiswaPage() {
 
   const handleDelete = async () => {
     if (!studentToDelete) return;
-    await run(
-      () => api(`students/${studentToDelete.id}`, "DELETE"),
-      `Data siswa ${studentToDelete.name} berhasil dihapus`,
-    );
-    setStudentToDelete(null);
+    setDeleteError("");
+    try {
+      await run(
+        () => api(`students/${studentToDelete.id}`, "DELETE"),
+        `Data siswa ${studentToDelete.name} berhasil dihapus`,
+      );
+      setStudentToDelete(null);
+    } catch (e) {
+      setDeleteError(
+        e instanceof Error ? e.message : "Gagal menghapus data siswa",
+      );
+    }
   };
 
   const handleDeleteDraft = async (id: string) => {
     if (!confirm("Hapus draf pendaftaran ini?")) return;
+    if (id.startsWith("local-")) {
+      try {
+        const raw = localStorage.getItem("taqwim_student_drafts_v1");
+        const list = raw ? JSON.parse(raw) : [];
+        const next = Array.isArray(list) ? list.filter((d: any) => d.id !== id) : [];
+        localStorage.setItem("taqwim_student_drafts_v1", JSON.stringify(next));
+        setDrafts((prev) => prev.filter((d) => d.id !== id));
+      } catch {
+        alert("Gagal menghapus draf lokal");
+      }
+      return;
+    }
     try {
       const res = await fetch(`/api/student-drafts/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -287,51 +321,21 @@ export default function MasterSiswaPage() {
     setShowExportModal(false);
   };
 
-  // Download Sample Template XLSX
-  const handleDownloadTemplate = () => {
-    const templateHeaders = [
-      "NIS",
-      "NISN",
-      "NIK",
-      "NO_KK",
-      "NAMA_LENGKAP",
-      "JENIS_KELAMIN",
-      "TEMPAT_LAHIR",
-      "TANGGAL_LAHIR",
-      "KELAS",
-      "NAMA_AYAH",
-      "NAMA_IBU",
-      "NO_HP_WALI",
-      "ALAMAT",
-    ];
-    const sampleRow = [
-      "262701099",
-      "0158912345",
-      "3201011505180001",
-      "3201012001150002",
-      "Ahmad Fauzan Al-Baqir",
-      "L",
-      "Bogor",
-      "2018-05-14",
-      "1-A Abu Bakar",
-      "Muhammad Ridwan",
-      "Siti Nurhaliza",
-      "081234567890",
-      "Jl. Pasirangin No. 12 RT 02/03",
-    ];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([templateHeaders, sampleRow]);
-    XLSX.utils.book_append_sheet(wb, ws, "Template_Siswa");
-    const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-    const blob = new Blob([buf], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Template_Import_Siswa_SDIT_At_Taqwim.xlsx";
-    a.click();
-    URL.revokeObjectURL(url);
+  // Download Sample Template XLSX from authoritative backend generator
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch("/api/students/import/template");
+      if (!res.ok) throw new Error("Gagal mengunduh template");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Template_Import_Siswa_SDIT_At_Taqwim.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Gagal mengunduh template import Excel.");
+    }
   };
 
   // Import File Parser (XLSX and CSV)
@@ -978,7 +982,7 @@ export default function MasterSiswaPage() {
                   >
                     <div>
                       <strong style={{ fontSize: 13, display: "block" }}>
-                        {d.studentName || "Calon Siswa Tanpa Nama"}
+                        {d.studentName || d.data?.student?.name || "Calon Siswa Tanpa Nama"}
                       </strong>
                       <span style={{ fontSize: 11, color: "var(--muted)" }}>
                         Langkah Terakhir: <b>{d.stepName || "Identitas"}</b> • Diperbarui:{" "}
@@ -1521,7 +1525,12 @@ export default function MasterSiswaPage() {
       {studentToDelete && (
         <Modal
           title="Konfirmasi Hapus Siswa"
-          close={() => !busy && setStudentToDelete(null)}
+          close={() => {
+            if (!busy) {
+              setStudentToDelete(null);
+              setDeleteError("");
+            }
+          }}
         >
           <div className="st-delete-modal-body">
             <p>
@@ -1531,12 +1540,24 @@ export default function MasterSiswaPage() {
             <div className="notice amber" style={{ marginTop: 12 }}>
               Data siswa yang telah memiliki transaksi keuangan (invoice/pembayaran) atau evaluasi ujian tidak dapat dihapus untuk menjaga integritas audit.
             </div>
+            {deleteError && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 p-3 mt-3 text-xs rounded-lg border border-destructive/20 bg-destructive/10 text-destructive font-medium"
+              >
+                <AlertTriangle size={15} className="shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
             <div className="st-modal-actions" style={{ marginTop: 20 }}>
               <button
                 type="button"
                 className="outline"
                 disabled={busy}
-                onClick={() => setStudentToDelete(null)}
+                onClick={() => {
+                  setStudentToDelete(null);
+                  setDeleteError("");
+                }}
               >
                 Batal
               </button>

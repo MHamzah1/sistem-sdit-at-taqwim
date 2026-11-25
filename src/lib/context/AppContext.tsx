@@ -6,6 +6,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -38,12 +39,18 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
 
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+    setError("");
+  }, [pathname]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -54,7 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setState(null);
-        if (pathname !== "/masuk") {
+        if (pathnameRef.current !== "/masuk") {
           router.push("/masuk");
         }
       } else {
@@ -63,11 +70,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [pathname, router]);
+  }, [router]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(""), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   useEffect(() => {
     if (toast) {

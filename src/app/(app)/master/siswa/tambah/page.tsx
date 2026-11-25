@@ -165,6 +165,24 @@ export default function TambahSiswaPage() {
   useEffect(() => {
     if (!draftIdParam) return;
     let mounted = true;
+    if (draftIdParam.startsWith("local-")) {
+      try {
+        const raw = localStorage.getItem("taqwim_student_drafts_v1");
+        const list = raw ? JSON.parse(raw) : [];
+        const found = Array.isArray(list) ? list.find((d: any) => d.id === draftIdParam) : null;
+        if (!found) {
+          setDraftError("Draf lokal tidak ditemukan di browser.");
+        } else {
+          setDraftProfile(normalizeDraftData(found.data));
+          setActiveDraftId(found.id);
+        }
+      } catch {
+        setDraftError("Gagal membaca draf lokal.");
+      } finally {
+        setLoadingDraft(false);
+      }
+      return;
+    }
     api<any>(`student-drafts/${draftIdParam}`)
       .then((draft) => {
         if (!mounted) return;
@@ -225,7 +243,8 @@ export default function TambahSiswaPage() {
 
   const handleSave = async (payload: any) => {
     try {
-      if (activeDraftId) {
+      const isLocalDraft = Boolean(activeDraftId?.startsWith("local-"));
+      if (activeDraftId && !isLocalDraft) {
         payload.draftId = activeDraftId;
       }
       const createdStudent = await api<{ id: string }>(
@@ -233,6 +252,20 @@ export default function TambahSiswaPage() {
         "POST",
         payload,
       );
+      if (isLocalDraft && activeDraftId) {
+        try {
+          const raw = localStorage.getItem("taqwim_student_drafts_v1");
+          const list = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(list)) {
+            localStorage.setItem(
+              "taqwim_student_drafts_v1",
+              JSON.stringify(list.filter((d: any) => d.id !== activeDraftId)),
+            );
+          }
+        } catch {
+          // ignore localStorage cleanup error
+        }
+      }
 
       await refresh();
       setToast(`Siswa ${payload.student.name} berhasil didaftarkan`);
@@ -247,6 +280,25 @@ export default function TambahSiswaPage() {
 
   const handleSaveDraft = async (payload: any) => {
     try {
+      if (activeDraftId && activeDraftId.startsWith("local-")) {
+        const raw = localStorage.getItem("taqwim_student_drafts_v1");
+        const list = raw ? JSON.parse(raw) : [];
+        const updatedList = Array.isArray(list)
+          ? list.map((d: any) =>
+              d.id === activeDraftId
+                ? {
+                    ...d,
+                    data: payload,
+                    studentName: payload?.student?.name || "Calon Siswa Tanpa Nama",
+                    updatedAt: new Date().toISOString(),
+                  }
+                : d,
+            )
+          : [];
+        localStorage.setItem("taqwim_student_drafts_v1", JSON.stringify(updatedList));
+        setToast("Draf lokal berhasil diperbarui");
+        return;
+      }
       if (activeDraftId) {
         await api(`student-drafts/${activeDraftId}`, "PATCH", payload);
         setToast("Draf berhasil diperbarui");
@@ -256,7 +308,27 @@ export default function TambahSiswaPage() {
         setToast("Draf pendaftaran berhasil disimpan sementara");
       }
     } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === "SCHEMA_NOT_READY") {
+        const localId = `local-${crypto.randomUUID()}`;
+        const raw = localStorage.getItem("taqwim_student_drafts_v1");
+        const list = raw ? JSON.parse(raw) : [];
+        const entry = {
+          id: localId,
+          data: payload,
+          studentName: payload?.student?.name || "Calon Siswa Tanpa Nama",
+          updatedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(
+          "taqwim_student_drafts_v1",
+          JSON.stringify(Array.isArray(list) ? [entry, ...list] : [entry]),
+        );
+        setActiveDraftId(localId);
+        setToast("Draf disimpan sementara secara lokal di browser");
+        return;
+      }
       setError(e instanceof Error ? e.message : "Gagal menyimpan draf");
+      throw e;
     }
   };
 
